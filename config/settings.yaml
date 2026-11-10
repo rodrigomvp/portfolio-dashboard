@@ -1,0 +1,23 @@
+# Portfolio configuration
+# Ticker symbols follow Yahoo Finance conventions (".LS" = Euronext Lisbon).
+# Confirm each symbol on finance.yahoo.com before the first download.
+
+tickers:
+  - EDP.LS    # EDP
+  - GALP.LS   # Galp Energia
+  - JMT.LS    # Jerónimo Martins
+  - NVG.LS    # The Navigator Company
+  - BCP.LS    # Millennium BCP
+  - SON.LS    # Sonae
+
+benchmark: PSI20.LS   # PSI index (check symbol on Yahoo; ^STOXX50E is an alternative)
+
+start_date: "2018-01-01"
+end_date: null        # null = up to today
+
+# Annual risk-free rate used in Sharpe ratio (decimal). E.g. 3-month Euribor.
+risk_free_rate: 0.02
+
+trading_days_per_year: 252
+
+database_path: data/prices.db
