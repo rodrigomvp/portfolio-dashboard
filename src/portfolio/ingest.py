@@ -6,28 +6,36 @@ import logging
 
 import pandas as pd
 
+import yfinance as yf
+
 from portfolio.config import Settings
 
 logger = logging.getLogger(__name__)
 
+COLUMNS = ["ticker", "date", "open", "high", "low", "close", "volume"]
+
 
 def fetch_prices(tickers: list[str], start: str, end: str | None = None) -> pd.DataFrame:
-    """Download OHLCV data and return it in long format.
+    raw = yf.download(
+        tickers,
+        start=start,
+        end=end,
+        auto_adjust=True,
+        group_by="ticker",
+        progress=False,
+    )
+    if raw.empty:
+        logger.warning("No data returned for %s", tickers)
+        return pd.DataFrame(columns=COLUMNS)
 
-    Output columns: ticker, date, open, high, low, close, volume.
+    long = raw.stack(level=0, future_stack=True).reset_index()
+    long.columns = ["date", "ticker", *[str(c).lower() for c in long.columns[2:]]]
+    long = long.dropna(subset=["close"])
 
-    TODO (Phase 1):
-      - `yf.download(tickers, start=start, end=end, auto_adjust=True,
-        group_by="ticker", progress=False)`.
-        With auto_adjust=True, "Close" is already adjusted for dividends
-        and splits (there is no separate "Adj Close" column).
-      - Reshape from wide (MultiIndex columns) to long:
-        `.stack(level=0)` or loop per ticker, then `reset_index()`.
-      - Rename columns to lowercase and drop rows where close is NaN.
-      - Log a warning for any ticker that returned no data
-        (usually a wrong symbol).
-    """
-    raise NotImplementedError
+    for ticker in sorted(set(tickers) - set(long["ticker"])):
+        logger.warning("No data for %s (check the symbol on Yahoo Finance)", ticker)
+
+    return long[COLUMNS].reset_index(drop=True)
 
 
 def update_database(settings: Settings) -> None:
