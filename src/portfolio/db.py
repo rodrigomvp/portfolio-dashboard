@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS prices (
 );
 """
 
+REQUIRED_COLUMNS = ["ticker", "date", "open", "high", "low", "close", "volume"]
+
 
 def get_connection(db_path: Path | str) -> sqlite3.Connection:
     db_path = Path(db_path)
@@ -39,25 +41,28 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 
 def upsert_prices(conn: sqlite3.Connection, df: pd.DataFrame) -> int:
-    """Insert or replace rows in `prices`. Returns the number of rows written.
+    missing = set(REQUIRED_COLUMNS) - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing columns: {sorted(missing)}")
 
-    `df` must have the columns: ticker, date, open, high, low, close, volume.
+    data = df[REQUIRED_COLUMNS].copy()
+    data["date"] = pd.to_datetime(data["date"]).dt.strftime("%Y-%m-%d")
+    data = data.astype(object).where(data.notna(), None)
 
-    TODO (Phase 1):
-      - Validate that the required columns exist.
-      - Convert `date` to 'YYYY-MM-DD' strings.
-      - Use `INSERT OR REPLACE INTO prices ...` with `conn.executemany`
-        so running the update twice does not create duplicates.
-    """
-    raise NotImplementedError
+    rows = list(data.itertuples(index=False, name=None))
+    conn.executemany(
+        "INSERT OR REPLACE INTO prices (ticker, date, open, high, low, close, volume) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    return len(rows)
 
 
 def last_date_per_ticker(conn: sqlite3.Connection) -> dict[str, str]:
-    """Return {ticker: most recent date stored}. Used for incremental updates.
+    rows = conn.execute("SELECT ticker, MAX(date) FROM prices GROUP BY ticker").fetchall()
 
-    TODO (Phase 1): SELECT ticker, MAX(date) FROM prices GROUP BY ticker
-    """
-    raise NotImplementedError
+    return dict(rows)
 
 
 def load_close_prices(
@@ -66,13 +71,22 @@ def load_close_prices(
     start: str | None = None,
     end: str | None = None,
 ) -> pd.DataFrame:
-    """Return a wide DataFrame of closing prices.
+    if not tickers:
+        return pd.DataFrame()
 
-    Index: DatetimeIndex (dates). Columns: one per ticker.
+    placeholders = ", ".join("?" * len(tickers))
+    query = f"SELECT date, ticker, close FROM prices WHERE ticker IN ({placeholders})"
+    params = list(tickers)
 
-    TODO (Phase 1):
-      - Query the long table with a parameterised WHERE ticker IN (...).
-      - `pivot(index="date", columns="ticker", values="close")`.
-      - Convert the index to datetime and sort it.
-    """
-    raise NotImplementedError
+    if start:
+        query += " AND date >= ?"
+        params.append(start)
+    if end:
+        query += " AND date <= ?"
+        params.append(end)
+
+    df = pd.read_sql_query(query, conn, params=params)
+    wide = df.pivot(index="date", columns="ticker", values="close")
+    wide.index = pd.to_datetime(wide.index)
+    wide.columns.name = None
+    return wide.sort_index()
