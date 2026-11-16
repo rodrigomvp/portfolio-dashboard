@@ -10,6 +10,8 @@ import yfinance as yf
 
 from portfolio.config import Settings
 
+from portfolio.db import get_connection, init_db, last_date_per_ticker, upsert_prices
+
 logger = logging.getLogger(__name__)
 
 COLUMNS = ["ticker", "date", "open", "high", "low", "close", "volume"]
@@ -38,14 +40,21 @@ def fetch_prices(tickers: list[str], start: str, end: str | None = None) -> pd.D
     return long[COLUMNS].reset_index(drop=True)
 
 
-def update_database(settings: Settings) -> None:
-    """Incremental update: only download what is not stored yet.
+def update_database(settings: Settings) -> dict[str, int]:
+    """Incremental update. Returns {ticker: rows written}."""
 
-    TODO (Phase 1):
-      1. Open connection + init_db.
-      2. last_date_per_ticker() -> for each symbol, start from the day
-         after the last stored date (or settings.start_date if new).
-      3. fetch_prices() and upsert_prices().
-      4. Log how many rows were written per ticker.
-    """
-    raise NotImplementedError
+    conn = get_connection(settings.database_path)
+    try:
+        init_db(conn)
+        last_dates = last_date_per_ticker(conn)
+        written = {}
+
+        for ticker in settings.all_symbols:
+            start = last_dates.get(ticker, settings.start_date)
+            df = fetch_prices([ticker], start=start, end=settings.end_date)
+            written[ticker] = upsert_prices(conn, df)
+            logger.info("%s: %d rows written (from %s)", ticker, written[ticker], start)
+    finally:
+        conn.close()
+
+    return written
