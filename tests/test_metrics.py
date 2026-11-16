@@ -80,3 +80,16 @@ def test_beta():
     bench = pd.Series([0.01, -0.02, 0.03, 0.00])
     asset = 2 * bench
     assert metrics.beta(asset, bench) == pytest.approx(2.0)
+
+
+def test_summary_table():
+    prices = pd.DataFrame(
+        {"A": [100.0, 110.0, 99.0, 120.0], "B": [50.0, 51.0, 52.0, 50.0]},
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+    table = metrics.summary_table(prices, risk_free_rate=0.0)
+    assert list(table.index) == ["A", "B"]
+    assert list(table.columns) == ["Annual return", "Annual volatility", "Sharpe ratio", "Max drawdown"]
+    returns = metrics.simple_returns(prices["A"])
+    assert table.loc["A", "Annual volatility"] == pytest.approx(metrics.annualized_volatility(returns))
+    assert table.loc["A", "Max drawdown"] == pytest.approx(-0.10)
