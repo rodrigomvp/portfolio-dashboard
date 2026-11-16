@@ -16,7 +16,7 @@ Most portfolio dashboards stop at descriptive charts. This one aims to support a
 
 | Area | Status |
 |---|---|
-| Daily price ingestion (yfinance → SQLite, incremental updates) | ⬜ Phase 1 |
+| Daily price ingestion (yfinance → SQLite, incremental updates) | ✅ Done |
 | Returns, volatility, Sharpe, max drawdown, correlation, beta | ⬜ Phase 2 |
 | Interactive Streamlit dashboard | ⬜ Phase 3 |
 | Historical & parametric VaR / CVaR | ⬜ Phase 4 |
@@ -58,7 +58,11 @@ pytest
 
 ## Methodology
 
-_To be written as each phase is completed: formulas used, annualisation conventions (252 trading days), choice of risk-free rate, VaR method._
+### Data
+- Source: Yahoo Finance via yfinance, adjusted daily closes (dividends and splits), Jan 2018 onwards.
+- Quality checks: see `notebooks/01_data_quality.ipynb`.
+- Missing data: the PSI index has no price on 12 of 2,272 dates (0.53%) while the stocks traded normally. Incomplete dates are dropped before computing returns, so all series are compared on the same days. Forward-filling was rejected because it creates artificial 0% index returns that bias correlation and beta.
+- Outliers: 4 daily moves above 15% (COVID crash, Pfizer vaccine announcement, Galp's Namibia discovery, Jeronimo Martins H1 2024 results). All are real events and are kept, since removing them would understate risk.
 
 ## Limitations
 

@@ -10,11 +10,11 @@ Plano em 6 fases. Cada fase termina com algo que funciona e um commit/tag no Git
 
 ## Fase 0 — Setup (≈ 1 dia)
 
-- [ ] Criar repositório **privado** `portfolio-dashboard` na conta pessoal do GitHub
-- [ ] Copiar esta estrutura, primeiro commit
-- [ ] Criar ambiente virtual, `pip install -r requirements.txt` e `pip install -e .`
-- [ ] Confirmar no finance.yahoo.com que os tickers de `config/settings.yaml` existem (incluindo o benchmark)
-- [ ] Correr `pytest` — os testes devem ser **recolhidos** e falhar com `NotImplementedError` (é o esperado)
+- [x] Criar repositório **privado** `portfolio-dashboard` na conta pessoal do GitHub
+- [x] Copiar esta estrutura, primeiro commit
+- [x] Criar ambiente virtual, `pip install -r requirements.txt` e `pip install -e .`
+- [x] Confirmar no finance.yahoo.com que os tickers de `config/settings.yaml` existem (incluindo o benchmark)
+- [x] Correr `pytest` — os testes devem ser **recolhidos** e falhar com `NotImplementedError` (é o esperado)
 
 **Concluído quando:** `streamlit run app/streamlit_app.py` abre a página com as tabs vazias.
 
@@ -24,12 +24,12 @@ Plano em 6 fases. Cada fase termina com algo que funciona e um commit/tag no Git
 
 Ficheiros: `src/portfolio/ingest.py`, `src/portfolio/db.py`, `scripts/update_data.py`
 
-- [ ] `fetch_prices()`: descarregar com yfinance e converter para formato longo
-- [ ] `upsert_prices()`: `INSERT OR REPLACE` para não haver duplicados
-- [ ] `last_date_per_ticker()` + `update_database()`: atualização incremental (só puxa dias novos)
-- [ ] `load_close_prices()`: devolver tabela larga (datas × tickers)
-- [ ] Explorar os dados num notebook rápido: dias em falta, feriados diferentes entre bolsas, valores estranhos
-- [ ] Decidir e documentar como tratar dias em falta (`ffill` limitado? remover?)
+- [x] `fetch_prices()`: descarregar com yfinance e converter para formato longo
+- [x] `upsert_prices()`: `INSERT OR REPLACE` para não haver duplicados
+- [x] `last_date_per_ticker()` + `update_database()`: atualização incremental (só puxa dias novos)
+- [x] `load_close_prices()`: devolver tabela larga (datas × tickers)
+- [x] Explorar os dados num notebook rápido: dias em falta, feriados diferentes entre bolsas, valores estranhos
+- [x] Decidir e documentar como tratar dias em falta (`ffill` limitado? remover?)
 
 **Concluído quando:** correr `update_data.py` duas vezes seguidas não duplica linhas e a segunda execução é quase instantânea.
 
@@ -62,6 +62,7 @@ Ficheiro: `src/portfolio/metrics.py` · Testes: `tests/test_metrics.py`
 Ficheiro: `app/streamlit_app.py` · Usar **Plotly** (gráficos interativos)
 
 - [ ] Carregar preços com `@st.cache_data`
+- [ ] Aplicar a decisão da Fase 1: `prices.dropna()` antes de calcular retornos (datas incompletas removidas)
 - [ ] Sidebar: ativos, pesos (aviso se não somarem 1), intervalo de datas, taxa sem risco
 - [ ] **Overview:** linha de KPIs (`st.metric`), preços normalizados a base 100 vs benchmark, tabela resumo
 - [ ] **Risk:** gráfico de drawdown (underwater), volatilidade móvel
