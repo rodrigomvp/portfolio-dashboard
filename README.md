@@ -19,8 +19,9 @@ Most portfolio dashboards stop at descriptive charts. This one aims to support a
 | Daily price ingestion (yfinance → SQLite, incremental updates) | ✅ Done |
 | Returns, volatility, Sharpe, max drawdown, correlation, beta | ✅ Done |
 | Interactive Streamlit dashboard | ✅ Done |
-| Historical & parametric VaR / CVaR | ⬜ Phase 4 |
-| Efficient frontier, min-variance & max-Sharpe portfolios | ⬜ Phase 4 |
+| Historical & parametric VaR / CVaR | ✅ Done |
+| Efficient frontier, min-variance & max-Sharpe portfolios | ✅ Done |
+| Two markets (Lisbon + New York) in euros, choice of benchmark (PSI, S&P 500, Nasdaq-100) | ✅ v1.1 |
 | Deployment + scheduled data refresh | ⬜ Phase 5 |
 
 ## Project structure
@@ -73,11 +74,15 @@ Guided by Apple's Human Interface Guidelines (accessibility, color, typography, 
 
 ### Data
 - Source: Yahoo Finance via yfinance, adjusted daily closes (dividends and splits), Jan 2018 onwards.
+- Currency: US prices are converted to euros with the daily EUR/USD rate (`EURUSD=X`), so returns and volatility are those of a euro investor and include currency risk.
 - Quality checks: see `notebooks/01_data_quality.ipynb`.
-- Missing data: the PSI index has no price on 12 of 2,272 dates (0.53%) while the stocks traded normally. Incomplete dates are dropped before computing returns, so all series are compared on the same days. Forward-filling was rejected because it creates artificial 0% index returns that bias correlation and beta.
+- Missing data and calendars: in v1.0 (Lisbon only) the PSI index had no price on 12 of 2,272 dates (0.53%), and those dates were dropped. With two exchanges, Lisbon and New York close on different holidays, and dropping every incomplete date would remove about 4% of the data. Since v1.1 a closed market keeps its last price for up to 3 days, which is how funds value their holdings every day. Annualised figures use the number of observations per year actually in the data instead of a fixed 252.
 - Outliers: 4 daily moves above 15% (COVID crash, Pfizer vaccine announcement, Galp's Namibia discovery, Jeronimo Martins H1 2024 results). All are real events and are kept, since removing them would understate risk.
 
 ## Limitations
+
+- **Different closing times.** Lisbon closes at 16:30 and New York at 21:00 (Lisbon time), so news after 16:30 shows up in Lisbon prices a day later. Daily correlations and betas between the two markets look lower than they are; the Correlation tab offers weekly returns for that reason.
+- **Price indices vs. adjusted prices.** Stock prices include dividends, but the PSI, S&P 500 and Nasdaq-100 are price indices. Comparisons with the index therefore favour the portfolio by roughly the index dividend yield.
 
 _To be written: survivorship bias, past performance vs. future returns, normality assumption in parametric VaR, data quality of yfinance._
 

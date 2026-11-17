@@ -93,6 +93,25 @@ Ficheiros: `src/portfolio/risk.py`, `src/portfolio/optimization.py`
 
 ---
 
+## v1.1 — Dois mercados (Lisboa + Nova Iorque)
+
+Ficheiros: `config/settings.yaml`, `src/portfolio/config.py`, `src/portfolio/fx.py` (novo), `src/portfolio/metrics.py`
+
+- [ ] Config: vários benchmarks, moeda base, moeda de cada ativo e taxa de câmbio
+- [ ] `fx.to_base_currency()`: converter preços em USD para EUR com o `EURUSD=X`
+- [ ] `metrics.align_calendars()`: feriados diferentes → último preço até 3 dias
+- [ ] `metrics.periods_per_year()`: anualizar com o número real de observações
+- [ ] `metrics.weekly_prices()`: correlações semanais (fechos a horas diferentes)
+- [ ] Descarregar Nvidia, Apple, McDonald's, S&P 500, Nasdaq-100 e EUR/USD
+- [ ] Verificar a qualidade dos dados novos (notebook `03_us_data.ipynb`)
+- [ ] App: escolher o benchmark, correlação diária/semanal
+
+**Concluído quando:** `pytest` passa todo e a app mostra os 9 ativos em euros com qualquer um dos 3 benchmarks.
+
+**Tag:** `v1.1-two-markets`
+
+---
+
 ## Fase 5 — Produção e apresentação (≈ 3–4 dias)
 
 - [ ] **Deploy** no Streamlit Community Cloud (ligar ao repositório GitHub)

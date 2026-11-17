@@ -21,7 +21,9 @@ def settings(tmp_path):
     return dataclasses.replace(
         load_settings(),
         tickers=["AAA", "BBB"],
-        benchmark="IDX",
+        benchmarks=["IDX"],
+        currencies={},
+        fx_symbols={},
         start_date="2024-01-01",
         end_date=None,
         database_path=tmp_path / "test.db",

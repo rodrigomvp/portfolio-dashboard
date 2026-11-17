@@ -21,14 +21,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from portfolio import metrics, optimization, risk
+from portfolio import fx, metrics, optimization, risk
 from portfolio.config import load_settings
 from portfolio.db import get_connection, load_close_prices
 
 st.set_page_config(page_title="Portfolio Risk Dashboard", page_icon="📈", layout="wide")
 
 settings = load_settings()
-BENCH = settings.benchmark
+BENCH = settings.benchmarks[0]  # replaced by the choice in the sidebar
+CURRENCY_SIGN = {"EUR": "€", "USD": "$", "GBP": "£"}.get(settings.base_currency, settings.base_currency + " ")
 name = settings.label  # ticker -> name people recognise ("JMT.LS" -> "Jerónimo Martins")
 
 ROLLING_WINDOW = 60  # trading days (~3 months)
@@ -102,18 +103,35 @@ st.html(
 # Data loading
 # --------------------------------------------------------------------------
 @st.cache_data(ttl=60 * 60)
-def get_prices(symbols: tuple[str, ...]) -> pd.DataFrame:
-    """Load closing prices once per hour (cached across reruns)."""
+def get_prices(symbols: tuple[str, ...]) -> tuple[pd.DataFrame, list[str]]:
+    """Load prices once per hour (cached across reruns), in the base currency, on one calendar.
+
+    Returns the prices and the list of symbols that have no data yet.
+    """
     conn = get_connection(settings.database_path)
     try:
-        prices = load_close_prices(conn, list(symbols))
+        raw = load_close_prices(conn, list(symbols))
     finally:
         conn.close()
-    # Phase 1 decision: keep only dates where every series has a price.
-    return prices.dropna()
+    missing = [s for s in symbols if s not in raw.columns]
+    if missing:
+        return pd.DataFrame(), missing
+
+    fx_columns = {symbol: currency for currency, symbol in settings.fx_symbols.items()}
+    rates = raw[list(fx_columns)].rename(columns=fx_columns)
+    assets = raw.drop(columns=list(fx_columns))
+    in_base = fx.to_base_currency(assets, settings.currencies, rates)
+    # Lisbon and New York have different holidays: carry a closed market's last price forward.
+    return metrics.align_calendars(in_base), []
 
 
-all_prices = get_prices(tuple(settings.all_symbols))
+all_prices, missing_symbols = get_prices(tuple(settings.all_symbols))
+if missing_symbols:
+    st.error(
+        f"No prices yet for {', '.join(missing_symbols)}. "
+        "Run `python scripts/update_data.py` and reload this page."
+    )
+    st.stop()
 if all_prices.empty:
     st.error("There is no price data yet. Run `python scripts/update_data.py` and reload this page.")
     st.stop()
@@ -218,9 +236,9 @@ def apply_weights(tickers: list[str], percents: list[int]) -> None:
 
 
 @st.cache_data(show_spinner="Optimising…")
-def optimise(asset_returns: pd.DataFrame, risk_free_rate: float) -> dict:
+def optimise(asset_returns: pd.DataFrame, risk_free_rate: float, periods: float) -> dict:
     """Run the optimiser once per (assets, period, risk-free rate); slider moves reuse the result."""
-    mu, cov = optimization.estimate_inputs(asset_returns)
+    mu, cov = optimization.estimate_inputs(asset_returns, periods)
     return {
         "mu": mu,
         "cov": cov,
@@ -260,6 +278,9 @@ with st.sidebar:
     st.caption(note)
     st.button("Equal weights", on_click=reset_weights, args=(selected,))
 
+    st.header("Compare with")
+    BENCH = st.selectbox("Benchmark", settings.benchmarks, format_func=name, label_visibility="collapsed")
+
     st.header("Period")
     custom = st.session_state.get("custom_dates", False)
     choice = st.segmented_control(
@@ -290,7 +311,9 @@ with st.sidebar:
         )
         st.caption("Used in the Sharpe ratio. Weights are rebalanced every day.")
 
-    st.caption(f"Prices up to {fmt_date(last_day)} · Yahoo Finance")
+    converted = sorted({settings.currency(s) for s in settings.tickers + settings.benchmarks} - {settings.base_currency})
+    fx_note = f" · {', '.join(converted)} prices converted to {settings.base_currency} daily" if converted else ""
+    st.caption(f"Prices up to {fmt_date(last_day)} · Yahoo Finance{fx_note}")
 
 
 # --------------------------------------------------------------------------
@@ -301,20 +324,23 @@ if len(prices) < MIN_DAYS:
     st.warning(f"This period has {len(prices)} trading days. Choose one with at least {MIN_DAYS}.")
     st.stop()
 
+PERIODS_PER_YEAR = metrics.periods_per_year(prices.index)  # ~252 for one exchange, more for two
 returns = metrics.simple_returns(prices)
 port_value = metrics.portfolio_value(prices[selected], weights)
 port_returns = metrics.simple_returns(port_value)
 bench_returns = returns[BENCH]
 bench_value = metrics.rebase(prices[BENCH])
 
-summary = metrics.summary_table(pd.concat([port_value, prices[[BENCH] + selected]], axis=1), risk_free)
+summary = metrics.summary_table(
+    pd.concat([port_value, prices[[BENCH] + selected]], axis=1), risk_free, PERIODS_PER_YEAR
+)
 summary.index = [name(i) if i != "Portfolio" else i for i in summary.index]
 p, b = summary.loc["Portfolio"], summary.loc[name(BENCH)]
 
 port_dd = metrics.drawdown_series(port_value)
 bench_dd = metrics.drawdown_series(prices[BENCH])
-port_vol = metrics.rolling_volatility(port_returns, ROLLING_WINDOW).dropna()
-bench_vol = metrics.rolling_volatility(bench_returns, ROLLING_WINDOW).dropna()
+port_vol = metrics.rolling_volatility(port_returns, ROLLING_WINDOW, PERIODS_PER_YEAR).dropna()
+bench_vol = metrics.rolling_volatility(bench_returns, ROLLING_WINDOW, PERIODS_PER_YEAR).dropna()
 
 
 # --------------------------------------------------------------------------
@@ -364,9 +390,9 @@ with tab_overview:
     )
 
     chart_header(
-        "Growth of €100",
-        f"€100 invested on {fmt_date(start)} was worth €{port_value.iloc[-1]:,.0f} on {fmt_date(end)}, "
-        f"against €{bench_value.iloc[-1]:,.0f} in the {name(BENCH)}.",
+        f"Growth of {CURRENCY_SIGN}100",
+        f"{CURRENCY_SIGN}100 invested on {fmt_date(start)} was worth {CURRENCY_SIGN}{port_value.iloc[-1]:,.0f} "
+        f"on {fmt_date(end)}, against {CURRENCY_SIGN}{bench_value.iloc[-1]:,.0f} in the {name(BENCH)}.",
     )
     st.plotly_chart(line_chart({"Portfolio": port_value, name(BENCH): bench_value}), theme=None, config=CHART_CONFIG)
 
@@ -460,7 +486,15 @@ with tab_risk:
     st.caption("The axis leaves out the 0.1% most extreme days on each side so the shape stays readable.")
 
 with tab_corr:
-    corr = metrics.correlation_matrix(returns)
+    markets = {settings.currency(t) for t in selected + [BENCH]}
+    frequency = st.segmented_control(
+        "Returns", ["Daily", "Weekly"], default="Weekly" if len(markets) > 1 else "Daily", required=True,
+        help="Lisbon closes at 16:30 and New York at 21:00 (Lisbon time). News after 16:30 reaches Lisbon "
+             "only the next day, so daily correlations between the two markets look lower than they are. "
+             "Weekly returns reduce that effect.",
+    )
+    corr_returns = returns if frequency == "Daily" else metrics.simple_returns(metrics.weekly_prices(prices))
+    corr = metrics.correlation_matrix(corr_returns)
     corr.index = corr.columns = [name(c) for c in corr.columns]
 
     # Show each pair once: keep the lower triangle, hide the diagonal of 1.00s.
@@ -478,7 +512,7 @@ with tab_corr:
         )
     else:
         summary_text = "Add a second asset to compare correlations."
-    chart_header("Correlation of daily returns", summary_text)
+    chart_header(f"Correlation of {frequency.lower()} returns", summary_text)
 
     fig = px.imshow(
         lower.iloc[1:, :-1],
@@ -507,7 +541,7 @@ with tab_opt:
         st.info("Choose at least two assets in the sidebar to compare different weightings.")
         st.stop()
 
-    opt = optimise(returns[selected], risk_free)
+    opt = optimise(returns[selected], risk_free, PERIODS_PER_YEAR)
     mu, cov = opt["mu"], opt["cov"]
     labels = [name(t) for t in selected]
     current = np.array([weights[t] for t in selected])
@@ -523,7 +557,7 @@ with tab_opt:
         f"The lowest-volatility mix brings risk down to {pct(v_min)}.",
     )
 
-    mu_idx, cov_idx = optimization.estimate_inputs(returns[[BENCH]])
+    mu_idx, cov_idx = optimization.estimate_inputs(returns[[BENCH]], PERIODS_PER_YEAR)
     cloud, frontier = opt["cloud"], opt["frontier"]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -547,9 +581,9 @@ with tab_opt:
         hovertemplate=name(BENCH) + "<br>Volatility %{x:.1%}<br>Return %{y:.1%}<extra></extra>",
     ))
     highlights = [
-        ("Lowest volatility", "square", T["ink"], (-90, 0)),
-        ("Highest Sharpe", "star", T["ink"], (-90, -30)),
-        ("Your portfolio", "circle", T["portfolio"], (-110, -45)),
+        ("Lowest volatility", "square", T["ink"], (-50, 0)),
+        ("Highest Sharpe", "star", T["ink"], (-50, -30)),
+        ("Your portfolio", "circle", T["portfolio"], (-60, -50)),
     ]
     # If the sliders already hold a suggested mix, label that point once
     same_as = [k for k in ("Lowest volatility", "Highest Sharpe") if np.allclose(current, mixes[k], atol=0.01)]
@@ -574,12 +608,12 @@ with tab_opt:
                                borderpad=2, standoff=8)
     all_vols = np.concatenate([np.sqrt(np.diag(cov)), [np.sqrt(cov_idx[0, 0])], cloud["volatility"]])
     base_layout(fig, height=480)
-    fig.update_xaxes(title_text="Volatility (a year)", tickformat=".0%",
-                     range=[all_vols.min() * 0.6, all_vols.max() * 1.05])
+    # Volatility starts at 0: an honest baseline, and room on the left for the labels
+    fig.update_xaxes(title_text="Volatility (a year)", tickformat=".0%", range=[0, all_vols.max() * 1.05])
     fig.update_yaxes(title_text="Expected return (a year)", tickformat=".0%")
     st.plotly_chart(fig, theme=None, config=CHART_CONFIG)
     st.caption(
-        "Expected return is the average daily return × 252, so it is a little higher than the compound "
+        "Expected return is the average daily return × days per year, so it is a little higher than the compound "
         "annual return on the Overview. Every grey dot is a random long-only mix of the selected assets."
     )
 
@@ -605,10 +639,10 @@ with tab_opt:
     # ---- Out-of-sample check -----------------------------------------------
     cutoff = prices.index[-1] - pd.DateOffset(years=1)
     train = returns.loc[:cutoff, selected]
-    if len(train) < 2 * 252:
+    if len(train) < 2 * PERIODS_PER_YEAR:
         st.info("Choose a period of at least 3 years to test whether the suggested weights would have worked.")
     else:
-        mu_t, cov_t = optimization.estimate_inputs(train)
+        mu_t, cov_t = optimization.estimate_inputs(train, PERIODS_PER_YEAR)
         w_fit = optimization.max_sharpe_weights(mu_t, cov_t, risk_free)
         test = prices.loc[cutoff:]
         result = {

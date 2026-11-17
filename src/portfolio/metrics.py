@@ -136,3 +136,32 @@ def portfolio_value(prices: pd.DataFrame, weights: dict[str, float] | np.ndarray
 def rolling_volatility(returns: pd.DataFrame | pd.Series, window: int = 60, periods: int = TRADING_DAYS):
     """Annualised volatility over a moving window of `window` days."""
     return returns.rolling(window).std() * np.sqrt(periods)
+
+def align_calendars(prices: pd.DataFrame, max_gap: int = 3) -> pd.DataFrame:
+    """Put series from different exchanges on one calendar.
+
+    Keeps every date on which at least one series has a price, carries the last
+    price of a closed market forward for up to `max_gap` days (holidays — this is
+    how funds value their holdings every day) and drops the dates before every
+    series has started.
+    """
+    has_any_price = prices.dropna(how="all")  # e.g. a day only the FX market traded
+    return has_any_price.sort_index().ffill(limit=max_gap).dropna()
+
+
+def periods_per_year(index: pd.DatetimeIndex) -> float:
+    """Observations per year actually present in the data.
+
+    About 252 for a single exchange, more when calendars are combined. Using the
+    real number keeps annualised figures honest.
+    """
+    years = (index[-1] - index[0]).days / 365.25
+    return (len(index) - 1) / years
+
+
+def weekly_prices(prices: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
+    """Last price of each week (Friday).
+
+    Weekly returns are less affected by markets closing at different times of day.
+    """
+    return prices.resample("W-FRI").last().dropna(how="all")

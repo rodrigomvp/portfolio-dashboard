@@ -3,14 +3,38 @@
 # Confirm each symbol on finance.yahoo.com before the first download.
 
 tickers:
+  # Euronext Lisbon (EUR)
   - EDP.LS    # EDP
   - GALP.LS   # Galp Energia
   - JMT.LS    # Jerónimo Martins
   - NVG.LS    # The Navigator Company
   - BCP.LS    # Millennium BCP
   - SON.LS    # Sonae
+  # US (USD)
+  - NVDA      # Nvidia
+  - AAPL      # Apple
+  - MCD       # McDonald's
 
-benchmark: PSI20.LS   # PSI index (check symbol on Yahoo; ^STOXX50E is an alternative)
+# Indices the dashboard can compare against; the first one is the default.
+benchmarks:
+  - PSI20.LS  # PSI (Lisbon)
+  - ^GSPC     # S&P 500
+  - ^NDX      # Nasdaq-100
+
+# Everything is shown in this currency.
+base_currency: EUR
+
+# Quote currency of every symbol that is NOT in the base currency.
+currencies:
+  NVDA: USD
+  AAPL: USD
+  MCD: USD
+  ^GSPC: USD
+  ^NDX: USD
+
+# Exchange rate per currency, as units of that currency per 1 EUR (EURUSD=X ≈ 1.10).
+fx_symbols:
+  USD: EURUSD=X
 
 start_date: "2018-01-01"
 end_date: null        # null = up to today
@@ -30,4 +54,9 @@ display_names:
   NVG.LS: Navigator
   BCP.LS: BCP
   SON.LS: Sonae
+  NVDA: Nvidia
+  AAPL: Apple
+  MCD: McDonald's
   PSI20.LS: PSI
+  ^GSPC: S&P 500
+  ^NDX: Nasdaq-100
