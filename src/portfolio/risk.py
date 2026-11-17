@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import pandas as pd
 
+from scipy.stats import norm
+
 
 def historical_var(returns: pd.Series, level: float = 0.95) -> float:
     """Empirical quantile: -quantile(returns, 1 - level)."""
-    raise NotImplementedError
-
+    return float(-returns.quantile(1 - level))
 
 def historical_cvar(returns: pd.Series, level: float = 0.95) -> float:
     """Average loss on the days that are worse than the VaR threshold."""
-    raise NotImplementedError
+    threshold = returns.quantile(1 - level)
+    return float(-returns[returns <= threshold].mean())
 
 
 def parametric_var(returns: pd.Series, level: float = 0.95) -> float:
@@ -26,4 +28,5 @@ def parametric_var(returns: pd.Series, level: float = 0.95) -> float:
     In the dashboard, compare it with historical VaR — the gap shows how far
     real returns are from a normal distribution (fat tails).
     """
-    raise NotImplementedError
+    z = norm.ppf(1 - level)
+    return float(-(returns.mean() + z * returns.std()))

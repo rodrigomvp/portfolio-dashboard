@@ -41,15 +41,15 @@ Ficheiros: `src/portfolio/ingest.py`, `src/portfolio/db.py`, `scripts/update_dat
 
 Ficheiro: `src/portfolio/metrics.py` · Testes: `tests/test_metrics.py`
 
-- [ ] Retornos simples e logarítmicos
-- [ ] Retorno anualizado (CAGR) e volatilidade anualizada
-- [ ] Sharpe ratio (com taxa sem risco da config)
-- [ ] Drawdown e max drawdown
-- [ ] Matriz de correlação
-- [ ] Retornos da carteira com pesos (validar soma = 1)
-- [ ] Beta face ao benchmark
-- [ ] `summary_table()` que junta tudo por ativo
-- [ ] Opcional: Sortino ratio, volatilidade móvel (rolling 60 dias)
+- [x] Retornos simples e logarítmicos
+- [x] Retorno anualizado (CAGR) e volatilidade anualizada
+- [x] Sharpe ratio (com taxa sem risco da config)
+- [x] Drawdown e max drawdown
+- [x] Matriz de correlação
+- [x] Retornos da carteira com pesos (validar soma = 1)
+- [x] Beta face ao benchmark
+- [x] `summary_table()` que junta tudo por ativo
+- [x] Opcional: Sortino ratio, volatilidade móvel (rolling 60 dias)
 
 **Concluído quando:** `pytest tests/test_metrics.py` passa todo a verde.
 
@@ -61,13 +61,13 @@ Ficheiro: `src/portfolio/metrics.py` · Testes: `tests/test_metrics.py`
 
 Ficheiro: `app/streamlit_app.py` · Usar **Plotly** (gráficos interativos)
 
-- [ ] Carregar preços com `@st.cache_data`
-- [ ] Aplicar a decisão da Fase 1: `prices.dropna()` antes de calcular retornos (datas incompletas removidas)
-- [ ] Sidebar: ativos, pesos (aviso se não somarem 1), intervalo de datas, taxa sem risco
-- [ ] **Overview:** linha de KPIs (`st.metric`), preços normalizados a base 100 vs benchmark, tabela resumo
-- [ ] **Risk:** gráfico de drawdown (underwater), volatilidade móvel
-- [ ] **Correlation:** heatmap com escala divergente de -1 a 1
-- [ ] Formatar percentagens e casas decimais de forma consistente
+- [x] Carregar preços com `@st.cache_data`
+- [x] Aplicar a decisão da Fase 1: `prices.dropna()` antes de calcular retornos (datas incompletas removidas)
+- [x] Sidebar: ativos, pesos (aviso se não somarem 1), intervalo de datas, taxa sem risco
+- [x] **Overview:** linha de KPIs (`st.metric`), preços normalizados a base 100 vs benchmark, tabela resumo
+- [x] **Risk:** gráfico de drawdown (underwater), volatilidade móvel
+- [x] **Correlation:** heatmap com escala divergente de -1 a 1
+- [x] Formatar percentagens e casas decimais de forma consistente
 
 **Concluído quando:** alguém que nunca viu o projeto consegue mudar os pesos e perceber o efeito em 30 segundos.
 
