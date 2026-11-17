@@ -17,8 +17,8 @@ Most portfolio dashboards stop at descriptive charts. This one aims to support a
 | Area | Status |
 |---|---|
 | Daily price ingestion (yfinance → SQLite, incremental updates) | ✅ Done |
-| Returns, volatility, Sharpe, max drawdown, correlation, beta | ⬜ Phase 2 |
-| Interactive Streamlit dashboard | ⬜ Phase 3 |
+| Returns, volatility, Sharpe, max drawdown, correlation, beta | ✅ Done |
+| Interactive Streamlit dashboard | ✅ Done |
 | Historical & parametric VaR / CVaR | ⬜ Phase 4 |
 | Efficient frontier, min-variance & max-Sharpe portfolios | ⬜ Phase 4 |
 | Deployment + scheduled data refresh | ⬜ Phase 5 |
@@ -55,6 +55,19 @@ python scripts/update_data.py    # download prices into data/prices.db
 streamlit run app/streamlit_app.py
 pytest
 ```
+
+## Design
+
+The dashboard answers one question: *is this portfolio worth the risk it takes compared with the PSI index?*
+The answer is written as a plain sentence at the top of the Overview, using the actual numbers; every chart below it supports that sentence.
+
+- **Colour has one meaning.** Blue is the portfolio, and also the accent of every control that changes it. Orange is the PSI, and the index line is always dashed so the two series never depend on colour alone. Green and red appear only on deltas against the index, always with an arrow.
+- **Contrast.** Text is at least 4.5:1 and chart lines at least 3:1 against the background, in both light and dark mode (tokens in `.streamlit/config.toml` and at the top of `app/streamlit_app.py`).
+- **Every chart has a one-sentence summary** with real values (dates, percentages), so the main message does not depend on reading the chart.
+- **Familiar controls.** Quick period ranges (1Y, 3Y, 5Y, Max) as in a stocks app, custom dates behind a toggle, weights as sliders with a one-click reset to equal weights, and assumptions (risk-free rate) tucked into an expander.
+- **System font** (San Francisco on Apple devices, Segoe UI on Windows) and tabular figures so numbers do not jump while sliders move.
+
+Guided by Apple's Human Interface Guidelines (accessibility, color, typography, charts).
 
 ## Methodology
 

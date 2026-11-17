@@ -1,0 +1,44 @@
+# Streamlit configuration — visual design of the dashboard.
+#
+# Design tokens (see README › Design):
+#   Blue   = the portfolio (also the accent of every control that changes it)
+#   Orange = the PSI index (charts only, always drawn dashed)
+#   Green / red = better / worse than the index (deltas only, always with an arrow)
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+font = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif"
+headingFontWeights = [600, 600, 600]
+headingFontSizes = ["2rem", "1.375rem", "1.125rem"]
+baseRadius = "0.625rem"
+showSidebarBorder = false
+
+[theme.light]
+primaryColor = "#0A66C2"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F5F7"
+textColor = "#1D1D1F"
+borderColor = "#E5E5EA"
+dataframeBorderColor = "#E5E5EA"
+greenColor = "#1A7431"
+redColor = "#D70015"
+
+[theme.light.sidebar]
+backgroundColor = "#F5F5F7"
+secondaryBackgroundColor = "#FFFFFF"
+
+[theme.dark]
+primaryColor = "#4C9AF0"
+backgroundColor = "#1C1C1E"
+secondaryBackgroundColor = "#2C2C2E"
+textColor = "#F5F5F7"
+borderColor = "#38383A"
+dataframeBorderColor = "#38383A"
+greenColor = "#30D158"
+redColor = "#FF6961"
+
+[theme.dark.sidebar]
+backgroundColor = "#2C2C2E"
+secondaryBackgroundColor = "#1C1C1E"

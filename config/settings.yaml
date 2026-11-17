@@ -21,3 +21,13 @@ risk_free_rate: 0.02
 trading_days_per_year: 252
 
 database_path: data/prices.db
+
+# Names shown in the dashboard (optional; falls back to the ticker symbol)
+display_names:
+  EDP.LS: EDP
+  GALP.LS: Galp
+  JMT.LS: Jerónimo Martins
+  NVG.LS: Navigator
+  BCP.LS: BCP
+  SON.LS: Sonae
+  PSI20.LS: PSI

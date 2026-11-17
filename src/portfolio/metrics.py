@@ -114,3 +114,25 @@ def summary_table(
             "Max drawdown": prices.apply(max_drawdown),
         }
     )
+
+def rebase(prices: pd.DataFrame | pd.Series, base: float = 100.0) -> pd.DataFrame | pd.Series:
+    """Rescale prices so every series starts at `base` (default 100)."""
+    return prices / prices.iloc[0] * base
+
+
+def portfolio_value(prices: pd.DataFrame, weights: dict[str, float] | np.ndarray, start: float = 100.0) -> pd.Series:
+    """Value of a portfolio that starts at `start` on the first date.
+
+    Uses portfolio_returns (daily rebalancing), then compounds the returns.
+    The first date is included with value `start`, so the result lines up
+    with `prices` and can be passed to drawdown_series or summary_table.
+    """
+    returns = portfolio_returns(simple_returns(prices), weights)
+    value = start * (1 + returns).cumprod()
+    first = pd.Series([start], index=prices.index[:1])
+    return pd.concat([first, value]).rename("Portfolio")
+
+
+def rolling_volatility(returns: pd.DataFrame | pd.Series, window: int = 60, periods: int = TRADING_DAYS):
+    """Annualised volatility over a moving window of `window` days."""
+    return returns.rolling(window).std() * np.sqrt(periods)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -20,6 +20,11 @@ class Settings:
     risk_free_rate: float
     trading_days_per_year: int
     database_path: Path
+    display_names: dict[str, str] = field(default_factory=dict)
+
+    def label(self, symbol: str) -> str:
+        """Name shown in the dashboard; falls back to the ticker symbol."""
+        return self.display_names.get(symbol, symbol)
 
     @property
     def all_symbols(self) -> list[str]:
@@ -39,4 +44,5 @@ def load_settings(path: Path | str = DEFAULT_CONFIG_PATH) -> Settings:
         risk_free_rate=float(raw.get("risk_free_rate", 0.0)),
         trading_days_per_year=int(raw.get("trading_days_per_year", 252)),
         database_path=PROJECT_ROOT / raw.get("database_path", "data/prices.db"),
+        display_names=dict(raw.get("display_names") or {}),
     )
