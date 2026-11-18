@@ -140,8 +140,8 @@ Ficheiros: `config/settings.yaml`, `src/portfolio/config.py`, `src/portfolio/fx.
 
 ### Tarefas
 Rodrigo:
-- [ ] `config.py`: ler `markets` (nome, moeda, tickers, benchmarks, taxa sem risco) — guiado por testes
-- [ ] `fx.to_new_york_close()`: corrigir o atraso de um dia do EUR/USD do Yahoo (descoberto no notebook 03)
+- [x] `config.py`: ler `markets` (nome, moeda, tickers, benchmarks, taxa sem risco) — guiado por testes
+- [x] `fx.to_new_york_close()`: corrigir o atraso de um dia do EUR/USD do Yahoo (descoberto no notebook 03)
 
 Claude:
 - [x] `settings.yaml` organizado por mercado, com as 7 ações novas e as taxas sem risco atualizadas
@@ -149,13 +149,27 @@ Claude:
 - [x] Testes ajustados, README (Design, Methodology), notebook `03_us_data.ipynb` atualizado
 
 Os dois:
-- [ ] `python scripts/update_data.py` para descarregar as 7 ações novas
-- [ ] Verificar a qualidade dos dados (notebook 03)
-- [ ] Testar a app com os dados reais
+- [x] `python scripts/update_data.py` para descarregar as 7 ações novas
+- [x] Verificar a qualidade dos dados (notebook 03)
+- [x] Testar a app com os dados reais
 
 **Concluído quando:** `pytest` passa todo; em Portugal tudo é comparado com o PSI em euros; nos EUA com o S&P 500 ou o Nasdaq-100, em dólares ou em euros.
 
 **Tag:** `v1.2-market-switch`
+
+---
+
+## v1.4 — Universo alargado de ativos (depois da Fase 5)
+
+Plano completo guardado no projeto do Claude (`plano-v1.4-universo-alargado.md`). Resumo:
+
+- [ ] Universo por mercado: os 16 constituintes do PSI e 44 ações americanas (4 por cada um dos 11 setores), com a carteira de hoje como seleção por defeito
+- [ ] Config: `tickers` (universo), `default_tickers`, mapa `sectors`
+- [ ] App: seletor com pesquisa (nome · setor), máximo de 15 ativos, exposição por setor no Overview
+- [ ] Notebook `04_universe_quality.ipynb`: histórico desde 2018, saltos por explicar, moeda
+- [ ] Depende da Fase 5, opção (b): os dados vêm do GitHub Action diário
+
+**Tag:** `v1.4-asset-universe`
 
 ---
 

@@ -60,17 +60,22 @@ pytest
 
 ## Design
 
-The dashboard answers one question: *is this portfolio worth the risk it takes compared with the PSI index?*
-The answer is written as a plain sentence at the top of the Overview, using the actual numbers; every chart below it supports that sentence.
+The dashboard answers one question: *is this portfolio worth the risk it takes compared with its market index?*
+The answer is a plain sentence with the actual numbers, and it is the largest text on the page; the app name stays small and every chart below supports that sentence.
+
+- **Choose the view, build the portfolio.** A floating context bar at the top holds what changes *what you are looking at*: market, period, benchmark and currency. The sidebar only holds what *builds* the portfolio: assets, weights and assumptions. On a phone the bar sits at the top of the page, so nothing important hides behind the collapsed sidebar.
+- **Glass only where it belongs.** The context bar is the one translucent surface (backdrop blur and a hairline edge, after Apple's Liquid Glass): it floats above content that scrolls beneath it, and charts, tables and text never get glass. With *Reduce transparency* or *Increase contrast* turned on in the system, the bar becomes opaque with a stronger border. Text on the bar keeps at least 6.9:1 contrast even with a coloured chart line passing underneath.
+- **A quiet scorecard.** Return, volatility, Sharpe ratio and max drawdown sit in one row without boxes, each with its difference from the index.
 
 - **Colour has one meaning.** Blue is the portfolio, and also the accent of every control that changes it. Orange is the PSI, and the index line is always dashed so the two series never depend on colour alone. Green and red appear only on deltas against the index, always with an arrow.
 - **Contrast.** Text is at least 4.5:1 and chart lines at least 3:1 against the background, in both light and dark mode (tokens in `.streamlit/config.toml` and at the top of `app/streamlit_app.py`).
 - **Every chart has a one-sentence summary** with real values (dates, percentages), so the main message does not depend on reading the chart.
 - **One market at a time.** A segmented control switches between Portugal and the United States, so each portfolio is compared with its own index (comparing Nvidia with the PSI says nothing). Each market keeps its own assets, weights and benchmark when you switch back and forth. US figures are in dollars by default; *Show in euros* converts them to what an investor in euros would have earned.
-- **Familiar controls.** Quick period ranges (1Y, 3Y, 5Y, Max) as in a stocks app, custom dates behind a toggle, weights as sliders with a one-click reset to equal weights, and assumptions (risk-free rate) tucked into an expander.
+- **Familiar controls.** Quick period ranges (1Y, 3Y, 5Y, Max, Custom) as in a stocks app, weights as sliders with a one-click reset to equal weights, and assumptions (risk-free rate) tucked into an expander.
+- **Charts that answer their own question.** Lines end with direct labels (e.g. *€281 Portfolio*), and drawdowns are drawn as a filled "underwater" area with the index dashed on top.
 - **System font** (San Francisco on Apple devices, Segoe UI on Windows) and tabular figures so numbers do not jump while sliders move.
 
-Guided by Apple's Human Interface Guidelines (accessibility, color, typography, charts).
+Guided by Apple's Human Interface Guidelines (accessibility, color, typography, layout, branding, charts, Liquid Glass).
 
 ## Methodology
 

@@ -59,6 +59,12 @@ TOKENS = {
         "negative": "#D70015",
         "neutral": "#F2F2F7",
         "cloud": "#C7C7CC",      # random portfolios (background texture, not data identity)
+        # Glass (context bar only): translucent fill, hairline border, specular top edge
+        "glass_fill": "rgba(255, 255, 255, 0.82)",
+        "glass_border": "rgba(0, 0, 0, 0.08)",
+        "glass_highlight": "rgba(255, 255, 255, 0.9)",
+        "glass_shadow": "0 8px 28px rgba(0, 0, 0, 0.08)",
+        "area": "rgba(10, 102, 194, 0.14)",
     },
     "dark": {
         "portfolio": "#4C9AF0",  # 5.8:1 on #1C1C1E
@@ -70,6 +76,11 @@ TOKENS = {
         "negative": "#FF6961",
         "neutral": "#3A3A3C",
         "cloud": "#48484A",
+        "glass_fill": "rgba(44, 44, 46, 0.80)",
+        "glass_border": "rgba(255, 255, 255, 0.10)",
+        "glass_highlight": "rgba(255, 255, 255, 0.10)",
+        "glass_shadow": "0 8px 28px rgba(0, 0, 0, 0.45)",
+        "area": "rgba(76, 154, 240, 0.20)",
     },
 }
 MODE = "dark" if st.context.theme.type == "dark" else "light"
@@ -94,9 +105,48 @@ st.html(
     <style>
       [data-testid="stMetricValue"], [data-testid="stDataFrame"] {{ font-variant-numeric: tabular-nums; }}
       [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p {{ color: {T["secondary"]}; opacity: 1; }}
-      [data-testid="stMainBlockContainer"] {{ padding-top: 2.5rem; }}
-      [data-testid="stMarkdownContainer"] p.verdict {{ font-size: 1.5rem; line-height: 1.4; font-weight: 400; color: {T["ink"]};
-                  max-width: 44rem; margin: 0.25rem 0 1.5rem 0; }}
+      [data-testid="stMainBlockContainer"] {{ padding-top: 1.5rem; }}
+      /* Type scale: the verdict is the largest text on the page; the app name defers to it */
+      [data-testid="stMarkdownContainer"] p.app-name {{ font-size: 0.9375rem; font-weight: 600; color: {T["secondary"]};
+                  margin: 0 0 0.5rem 0.25rem; }}
+      [data-testid="stMarkdownContainer"] p.verdict {{ font-size: 1.75rem; line-height: 1.35; font-weight: 400; color: {T["ink"]};
+                  max-width: 46rem; margin: 1.5rem 0 1.25rem 0; letter-spacing: -0.01em; }}
+      [data-testid="stMetricValue"] {{ font-size: 1.75rem; }}
+      [data-testid="stMarkdownContainer"] p.bar-label {{ font-size: 0.8125rem; font-weight: 500; color: {T["ink"]};
+                  margin: 0 0 0.25rem 0; }}
+      [data-testid="stMarkdownContainer"] p.bar-value {{ font-size: 0.9375rem; color: {T["ink"]}; margin: 0.375rem 0 0.5rem 0; }}
+
+      /* Liquid Glass, functional layer only: the floating context bar.
+         Content (charts, tables, text) never gets glass. */
+      /* Sticky on the wrapper Streamlit puts around the container, so the bar stays while content scrolls under it */
+      [data-testid="stLayoutWrapper"]:has(> .st-key-context_bar) {{ position: sticky; top: 0.75rem; z-index: 990; }}
+      /* Scroll edge: a short fade above the bar so content never peeks out between the bar and the window edge */
+      [data-testid="stLayoutWrapper"]:has(> .st-key-context_bar)::before {{
+          content: ""; position: absolute; left: -1rem; right: -1rem; top: -0.75rem; height: 1.5rem; z-index: -1;
+          background: linear-gradient({T["surface"]} 55%, transparent); pointer-events: none;
+      }}
+      .st-key-context_bar {{
+          padding: 0.875rem 1.25rem 0.5rem 1.25rem; border-radius: 1.25rem;
+          background: {T["glass_fill"]};
+          -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4);
+          border: 1px solid {T["glass_border"]};
+          box-shadow: {T["glass_shadow"]}, inset 0 1px 0 {T["glass_highlight"]};
+      }}
+      /* Accessibility states: opaque surface, stronger edge */
+      @media (prefers-reduced-transparency: reduce) {{
+          .st-key-context_bar {{ background: {T["surface"]}; -webkit-backdrop-filter: none; backdrop-filter: none; }}
+      }}
+      @media (prefers-contrast: more) {{
+          .st-key-context_bar {{ background: {T["surface"]}; -webkit-backdrop-filter: none; backdrop-filter: none;
+                                 border: 1px solid {T["secondary"]}; }}
+      }}
+      /* On narrow screens the bar stacks into several rows: let it scroll away instead of covering the page */
+      @media (max-width: 640px) {{
+          [data-testid="stLayoutWrapper"]:has(> .st-key-context_bar) {{ position: static; }}
+          [data-testid="stLayoutWrapper"]:has(> .st-key-context_bar)::before {{ display: none; }}
+          [data-testid="stMainBlockContainer"] {{ padding-top: 3.75rem; }}
+          [data-testid="stMarkdownContainer"] p.verdict {{ font-size: 1.375rem; }}
+      }}
       [data-testid="stMarkdownContainer"] p.verdict strong {{ font-weight: 600; }}
       [data-testid="stMarkdownContainer"] p.chart-title {{ font-size: 1.0625rem; font-weight: 600; color: {T["ink"]}; margin: 1.25rem 0 0.125rem 0; }}
       {CHIP_CSS}
@@ -182,8 +232,14 @@ def chart_header(title: str, summary: str) -> None:
     st.markdown(f'<p class="chart-title">{title}</p><p class="chart-summary">{summary}</p>', unsafe_allow_html=True)
 
 
-def line_chart(series: dict[str, pd.Series], percent: bool = False) -> go.Figure:
-    """Portfolio vs index. Colour AND line style tell them apart (index is dashed)."""
+def line_chart(
+    series: dict[str, pd.Series], percent: bool = False, area: bool = False, end_labels: str | None = None
+) -> go.Figure:
+    """Portfolio vs index. Colour AND line style tell them apart (index is dashed).
+
+    area: fill the portfolio down to zero (used for drawdowns, the "underwater" view).
+    end_labels: format for a direct label at the last value of each line, e.g. "€{:,.0f}".
+    """
     styles = {
         "Portfolio": {"color": T["portfolio"], "width": 2.5},
         name(BENCH): {"color": T["index"], "width": 2, "dash": "dash"},
@@ -191,10 +247,21 @@ def line_chart(series: dict[str, pd.Series], percent: bool = False) -> go.Figure
     value_format = "%{y:.1%}" if percent else "%{y:.1f}"
     fig = go.Figure()
     for label, s in series.items():
+        fill = {"fill": "tozeroy", "fillcolor": T["area"]} if area and label == "Portfolio" else {}
         fig.add_trace(
             go.Scatter(x=s.index, y=s.values, name=label, mode="lines",
-                       line=styles[label], hovertemplate=value_format)
+                       line=styles[label], hovertemplate=value_format, **fill)
         )
+    if end_labels:
+        # Direct labels at the end of each line answer the chart's question without the legend
+        ends = sorted(series.items(), key=lambda kv: kv[1].iloc[-1], reverse=True)
+        for rank, (label, s) in enumerate(ends):
+            fig.add_annotation(
+                x=s.index[-1], y=s.iloc[-1], text=f"<b>{end_labels.format(s.iloc[-1])}</b> {label}",
+                showarrow=False, xanchor="right", yanchor="bottom" if rank == 0 else "top",
+                yshift=8 if rank == 0 else -8, font={"color": T["ink"], "size": 13},
+                bgcolor=T["surface"], borderpad=2,
+            )
     fig.update_layout(
         font={"family": FONT, "size": 13, "color": T["secondary"]},
         paper_bgcolor="rgba(0,0,0,0)",
@@ -258,26 +325,39 @@ def optimise(asset_returns: pd.DataFrame, risk_free_rate: float, periods: float)
 
 
 # --------------------------------------------------------------------------
-# Sidebar — inputs
+# Header and context bar — what you are looking at (market, period, benchmark, currency)
+# Layout: the sidebar builds the portfolio; the context bar chooses the view.
 # --------------------------------------------------------------------------
-with st.sidebar:
-    st.header("Market")
-    market_key = st.segmented_control(
-        "Market", list(settings.markets), format_func=lambda k: settings.markets[k].name,
-        default=list(settings.markets)[0], required=True, key="market", label_visibility="collapsed",
-        width="stretch",
-    )
+st.markdown('<p class="app-name">Portfolio Risk Dashboard</p>', unsafe_allow_html=True)
+
+with st.container(key="context_bar"):
+    col_market, col_period, col_bench, col_currency = st.columns([1.35, 1.7, 1.05, 0.9], vertical_alignment="top")
+
+    with col_market:
+        st.markdown('<p class="bar-label">Market</p>', unsafe_allow_html=True)
+        market_key = st.segmented_control(
+            "Market", list(settings.markets), format_func=lambda k: settings.markets[k].name,
+            default=list(settings.markets)[0], required=True, key="market", label_visibility="collapsed",
+            width="stretch",
+        )
     MARKET = settings.markets[market_key]
 
-    in_base = False
-    if MARKET.currency != settings.base_currency:
-        st.session_state.setdefault(f"in_base_{market_key}", False)
-        in_base = st.toggle(
-            f"Show in {CURRENCY_NAMES.get(settings.base_currency, settings.base_currency)}",
-            key=f"in_base_{market_key}",
-            help=f"Converts prices with the daily {settings.base_currency}/{MARKET.currency} rate, "
-                 "so returns and risk are those of an investor who holds euros.",
-        )
+    with col_currency:
+        st.markdown('<p class="bar-label">Currency</p>', unsafe_allow_html=True)
+        in_base = False
+        if MARKET.currency != settings.base_currency:
+            st.session_state.setdefault(f"in_base_{market_key}", False)
+            in_base = st.toggle(
+                f"Show in {CURRENCY_NAMES.get(settings.base_currency, settings.base_currency)}",
+                key=f"in_base_{market_key}",
+                help=f"Converts prices with the daily {settings.base_currency}/{MARKET.currency} rate, "
+                     "so returns and risk are those of an investor who holds euros.",
+            )
+        else:
+            st.markdown(
+                f'<p class="bar-value">{CURRENCY_NAMES.get(MARKET.currency, MARKET.currency).capitalize()}</p>',
+                unsafe_allow_html=True,
+            )
     CURRENCY = settings.base_currency if in_base else MARKET.currency
     CURRENCY_SIGN = CURRENCY_SIGNS.get(CURRENCY, CURRENCY + " ")
 
@@ -285,6 +365,44 @@ with st.sidebar:
     first_day = all_prices.index.min().date()
     last_day = all_prices.index.max().date()
 
+    with col_bench:
+        st.markdown('<p class="bar-label">Compare with</p>', unsafe_allow_html=True)
+        if len(MARKET.benchmarks) > 1:
+            st.session_state.setdefault(f"bench_{market_key}", MARKET.benchmarks[0])
+            BENCH = st.selectbox(
+                "Benchmark", MARKET.benchmarks, format_func=name, key=f"bench_{market_key}",
+                label_visibility="collapsed",
+            )
+        else:
+            BENCH = MARKET.benchmarks[0]
+            st.markdown(f'<p class="bar-value">{name(BENCH)}</p>', unsafe_allow_html=True)
+
+    with col_period:
+        st.markdown('<p class="bar-label">Period</p>', unsafe_allow_html=True)
+        choice = st.segmented_control(
+            "Period", [*PERIODS, "Custom"], default="Max", required=True, key="period",
+            label_visibility="collapsed", width="stretch",
+        ) or "Max"
+        if choice == "Custom":
+            chosen = st.date_input(
+                "Dates", value=(first_day, last_day), min_value=first_day, max_value=last_day,
+                format="DD/MM/YYYY", label_visibility="collapsed",
+            )
+            if not isinstance(chosen, tuple) or len(chosen) != 2:
+                st.info("Pick an end date to finish the range.")
+                st.stop()
+            start, end = chosen
+        elif PERIODS[choice]:
+            end = last_day
+            start = max(first_day, (pd.Timestamp(last_day) - pd.DateOffset(years=PERIODS[choice])).date())
+        else:
+            start, end = first_day, last_day
+
+
+# --------------------------------------------------------------------------
+# Sidebar — build the portfolio
+# --------------------------------------------------------------------------
+with st.sidebar:
     st.header("Portfolio")
     st.session_state.setdefault(f"assets_{market_key}", MARKET.tickers)
     n_chosen = len(st.session_state[f"assets_{market_key}"])
@@ -315,37 +433,6 @@ with st.sidebar:
         note += " · rescaled to 100% in the calculations"
     st.caption(note)
     st.button("Equal weights", on_click=reset_weights, args=(selected,))
-
-    if len(MARKET.benchmarks) > 1:
-        st.header("Compare with")
-        st.session_state.setdefault(f"bench_{market_key}", MARKET.benchmarks[0])
-        BENCH = st.selectbox(
-            "Benchmark", MARKET.benchmarks, format_func=name, key=f"bench_{market_key}",
-            label_visibility="collapsed",
-        )
-    else:
-        BENCH = MARKET.benchmarks[0]
-
-    st.header("Period")
-    custom = st.session_state.get("custom_dates", False)
-    choice = st.segmented_control(
-        "Period", list(PERIODS), default="Max", required=True, key="period", label_visibility="collapsed",
-        width="stretch", disabled=custom,
-    ) or "Max"
-    st.toggle("Custom dates", key="custom_dates")
-    if custom:
-        chosen = st.date_input(
-            "Dates", value=(first_day, last_day), min_value=first_day, max_value=last_day, format="DD/MM/YYYY"
-        )
-        if not isinstance(chosen, tuple) or len(chosen) != 2:
-            st.info("Pick an end date to finish the range.")
-            st.stop()
-        start, end = chosen
-    elif PERIODS[choice]:
-        end = last_day
-        start = max(first_day, (pd.Timestamp(last_day) - pd.DateOffset(years=PERIODS[choice])).date())
-    else:
-        start, end = first_day, last_day
 
     with st.expander("Assumptions"):
         st.session_state.setdefault(f"rf_{CURRENCY}", round(settings.risk_free_rate_for(CURRENCY) * 100, 2))
@@ -395,59 +482,61 @@ bench_vol = metrics.rolling_volatility(bench_returns, ROLLING_WINDOW, PERIODS_PE
 # --------------------------------------------------------------------------
 # Main page
 # --------------------------------------------------------------------------
-st.title("Portfolio Risk Dashboard")
+diff = p["Annual return"] - b["Annual return"]
+st.markdown(
+    f'<p class="verdict">Since {fmt_date(start)}, this portfolio returned '
+    f'<strong>{p["Annual return"]:.1%} a year</strong> in {CURRENCY_NAMES.get(CURRENCY, CURRENCY)}, '
+    f'{abs(diff) * 100:.1f} percentage points '
+    f'{"more" if diff >= 0 else "less"} than the {name(BENCH)}, with '
+    f'<strong>{p["Annual volatility"]:.1%} volatility</strong> against {b["Annual volatility"]:.1%} '
+    f"for the index.</p>",
+    unsafe_allow_html=True,
+)
+
+# Scorecard: one quiet row, no boxes — the sentence above is the headline
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Annual return", f"{p['Annual return']:.1%}", pp(diff))
+c2.metric(
+    "Annual volatility",
+    f"{p['Annual volatility']:.1%}",
+    pp(p["Annual volatility"] - b["Annual volatility"]),
+    delta_color="inverse",  # lower volatility is better
+)
+c3.metric(
+    "Sharpe ratio",
+    f"{p['Sharpe ratio']:.2f}",
+    f"{p['Sharpe ratio'] - b['Sharpe ratio']:+.2f} vs {name(BENCH)}",
+    help="Return above the risk-free rate for each unit of volatility. Higher is better.",
+)
+c4.metric(
+    "Max drawdown",
+    pct(p["Max drawdown"]),
+    pp(p["Max drawdown"] - b["Max drawdown"]),
+    help="Worst fall from a previous peak.",
+)
 st.caption(
-    f"{MARKET.name} · {len(selected)} assets against the {name(BENCH)} · in {CURRENCY_NAMES.get(CURRENCY, CURRENCY)} · "
-    f"{fmt_date(start)} to {fmt_date(end)} · {len(prices):,} trading days · Educational project, not investment advice"
+    f"{len(selected)} assets · {len(prices):,} trading days to {fmt_date(end)} · "
+    "Educational project, not investment advice"
 )
 
 tab_overview, tab_risk, tab_corr, tab_opt = st.tabs(["Overview", "Risk", "Correlation", "Optimisation"])
 
 with tab_overview:
-    diff = p["Annual return"] - b["Annual return"]
-    st.markdown(
-        f'<p class="verdict">Since {fmt_date(start)}, this portfolio returned '
-        f'<strong>{p["Annual return"]:.1%} a year</strong> in {CURRENCY_NAMES.get(CURRENCY, CURRENCY)}, '
-        f'{abs(diff) * 100:.1f} percentage points '
-        f'{"more" if diff >= 0 else "less"} than the {name(BENCH)}, with '
-        f'<strong>{p["Annual volatility"]:.1%} volatility</strong> against {b["Annual volatility"]:.1%} '
-        f"for the index.</p>",
-        unsafe_allow_html=True,
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Annual return", f"{p['Annual return']:.1%}", pp(diff), border=True)
-    c2.metric(
-        "Annual volatility",
-        f"{p['Annual volatility']:.1%}",
-        pp(p["Annual volatility"] - b["Annual volatility"]),
-        delta_color="inverse",  # lower volatility is better
-        border=True,
-    )
-    c3.metric(
-        "Sharpe ratio",
-        f"{p['Sharpe ratio']:.2f}",
-        f"{p['Sharpe ratio'] - b['Sharpe ratio']:+.2f} vs {name(BENCH)}",
-        border=True,
-        help="Return above the risk-free rate for each unit of volatility. Higher is better.",
-    )
-    c4.metric(
-        "Max drawdown",
-        pct(p["Max drawdown"]),
-        pp(p["Max drawdown"] - b["Max drawdown"]),
-        border=True,
-        help="Worst fall from a previous peak.",
-    )
-
     chart_header(
         f"Growth of {CURRENCY_SIGN}100",
         f"{CURRENCY_SIGN}100 invested on {fmt_date(start)} was worth {CURRENCY_SIGN}{port_value.iloc[-1]:,.0f} "
         f"on {fmt_date(end)}, against {CURRENCY_SIGN}{bench_value.iloc[-1]:,.0f} in the {name(BENCH)}.",
     )
-    st.plotly_chart(line_chart({"Portfolio": port_value, name(BENCH): bench_value}), theme=None, config=CHART_CONFIG)
+    st.plotly_chart(
+        line_chart({"Portfolio": port_value, name(BENCH): bench_value}, end_labels=CURRENCY_SIGN + "{:,.0f}"),
+        theme=None, config=CHART_CONFIG,
+    )
 
     st.subheader("By asset")
-    st.dataframe(summary.style.format(TABLE_FORMAT))
+    st.dataframe(
+        summary.rename_axis("").reset_index().style.format(TABLE_FORMAT), hide_index=True,
+        column_config={"": st.column_config.TextColumn(width="medium")},
+    )
     st.caption("Annualised over the selected period. Max drawdown is the worst fall from a previous peak.")
 
 with tab_risk:
@@ -455,22 +544,22 @@ with tab_risk:
     c1.metric(
         f"Beta vs {name(BENCH)}",
         f"{metrics.beta(port_returns, bench_returns):.2f}",
-        border=True,
-        height="stretch",
         help="How much the portfolio moves when the index moves 1%. Above 1 means it amplifies the index.",
     )
     c2.metric("Worst drawdown", pct(port_dd.min()), f"on {fmt_date(port_dd.idxmin())}",
-              delta_color="off", delta_arrow="off", border=True, height="stretch")
+              delta_color="off", delta_arrow="off")
     c3.metric(f"Highest {ROLLING_WINDOW}-day volatility", pct(port_vol.max(), 0),
-              f"on {fmt_date(port_vol.idxmax())}", delta_color="off", delta_arrow="off", border=True,
-              height="stretch")
+              f"on {fmt_date(port_vol.idxmax())}", delta_color="off", delta_arrow="off")
 
     chart_header(
         "Drawdown",
         f"Distance from the previous peak. The portfolio's deepest fall was {pct(port_dd.min())} on "
         f"{fmt_date(port_dd.idxmin())}; the {name(BENCH)}'s was {pct(bench_dd.min())} on {fmt_date(bench_dd.idxmin())}.",
     )
-    st.plotly_chart(line_chart({"Portfolio": port_dd, name(BENCH): bench_dd}, percent=True), theme=None, config=CHART_CONFIG)
+    st.plotly_chart(
+        line_chart({"Portfolio": port_dd, name(BENCH): bench_dd}, percent=True, area=True),
+        theme=None, config=CHART_CONFIG,
+    )
 
     chart_header(
         f"Volatility over the last {ROLLING_WINDOW} trading days",
@@ -491,11 +580,11 @@ with tab_risk:
     var_norm = risk.parametric_var(port_returns, level)
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Daily VaR (historical)", pct(var_hist), border=True, height="stretch",
+    c1.metric("Daily VaR (historical)", pct(var_hist),
               help=f"On {level:.0%} of days, the daily loss was smaller than this.")
-    c2.metric("Daily CVaR (historical)", pct(cvar_hist), border=True, height="stretch",
+    c2.metric("Daily CVaR (historical)", pct(cvar_hist),
               help=f"Average loss on the worst {tail}% of days.")
-    c3.metric("Daily VaR (normal model)", pct(var_norm), border=True, height="stretch",
+    c3.metric("Daily VaR (normal model)", pct(var_norm),
               help="What a normal distribution with the same mean and volatility would predict.")
 
     if var_norm < var_hist:
@@ -664,14 +753,20 @@ with tab_opt:
 
     st.subheader("Suggested weights")
     weights_table = pd.DataFrame({k: to_percent_weights(w) for k, w in mixes.items()}, index=labels)
-    st.dataframe(weights_table.style.format("{:d}%"))
+    st.dataframe(
+        weights_table.rename_axis("").reset_index().style.format("{:d}%", subset=list(mixes)), hide_index=True,
+        column_config={"": st.column_config.TextColumn(width="medium")},
+    )
 
     stats = pd.DataFrame(
         {k: {"Expected return": r, "Volatility": v, "Sharpe ratio": sharpe[k]} for k, (r, v) in perf.items()}
     )
     st.dataframe(
-        stats.style.format("{:.1%}", subset=pd.IndexSlice[["Expected return", "Volatility"], :])
-        .format("{:.2f}", subset=pd.IndexSlice[["Sharpe ratio"], :])
+        stats.rename_axis("").reset_index().style
+        .format("{:.1%}", subset=pd.IndexSlice[[0, 1], list(mixes)])
+        .format("{:.2f}", subset=pd.IndexSlice[[2], list(mixes)]),
+        hide_index=True,
+        column_config={"": st.column_config.TextColumn(width="medium")},
     )
 
     b1, b2 = st.columns(2)
@@ -705,6 +800,6 @@ with tab_opt:
         )
         c1, c2, c3 = st.columns(3)
         for col, (label, g) in zip((c1, c2, c3), growth.items()):
-            col.metric(label, pct(g), border=True, height="stretch")
+            col.metric(label, pct(g))
         fitted = ", ".join(f"{lab} {w}%" for lab, w in zip(labels, to_percent_weights(w_fit)) if w > 0)
         st.caption(f"Fitted weights: {fitted}. Last 12 months of the selected period.")
