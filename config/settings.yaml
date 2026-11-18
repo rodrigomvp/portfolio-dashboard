@@ -2,45 +2,56 @@
 # Ticker symbols follow Yahoo Finance conventions (".LS" = Euronext Lisbon).
 # Confirm each symbol on finance.yahoo.com before the first download.
 
-tickers:
-  # Euronext Lisbon (EUR)
-  - EDP.LS    # EDP
-  - GALP.LS   # Galp Energia
-  - JMT.LS    # Jerónimo Martins
-  - NVG.LS    # The Navigator Company
-  - BCP.LS    # Millennium BCP
-  - SON.LS    # Sonae
-  # US (USD)
-  - NVDA      # Nvidia
-  - AAPL      # Apple
-  - MCD       # McDonald's
+# Each market is shown on its own in the dashboard and compared with its own indices.
+markets:
+  PT:
+    name: Portugal
+    currency: EUR
+    tickers:
+      - EDP.LS    # EDP — utilities
+      - GALP.LS   # Galp Energia — energy
+      - JMT.LS    # Jerónimo Martins — consumer staples
+      - NVG.LS    # The Navigator Company — materials (paper)
+      - BCP.LS    # Millennium BCP — financials
+      - SON.LS    # Sonae — consumer staples / retail
+    benchmarks:
+      - PSI20.LS  # PSI
 
-# Indices the dashboard can compare against; the first one is the default.
-benchmarks:
-  - PSI20.LS  # PSI (Lisbon)
-  - ^GSPC     # S&P 500
-  - ^NDX      # Nasdaq-100
+  US:
+    name: United States
+    currency: USD
+    tickers:      # 10 companies, 9 of the 11 S&P 500 sectors
+      - NVDA      # Nvidia — information technology
+      - AAPL      # Apple — information technology
+      - MCD       # McDonald's — consumer discretionary
+      - JPM       # JPMorgan Chase — financials
+      - JNJ       # Johnson & Johnson — health care
+      - XOM       # Exxon Mobil — energy
+      - KO        # Coca-Cola — consumer staples
+      - CAT       # Caterpillar — industrials
+      - GOOGL     # Alphabet — communication services
+      - NEE       # NextEra Energy — utilities
+    benchmarks:   # the first one is the default
+      - ^GSPC     # S&P 500
+      - ^NDX      # Nasdaq-100 (only Nvidia, Apple and Alphabet are members)
 
-# Everything is shown in this currency.
+# "Show in euros" converts US prices to this currency.
 base_currency: EUR
-
-# Quote currency of every symbol that is NOT in the base currency.
-currencies:
-  NVDA: USD
-  AAPL: USD
-  MCD: USD
-  ^GSPC: USD
-  ^NDX: USD
 
 # Exchange rate per currency, as units of that currency per 1 EUR (EURUSD=X ≈ 1.10).
 fx_symbols:
   USD: EURUSD=X
 
+# Annual risk-free rate for each currency, used in the Sharpe ratio (decimal).
+# Update now and then. Values from 16–17 Nov 2026:
+#   EUR: 3-month Euribor (euribor-rates.eu)
+#   USD: 3-month US Treasury yield (FRED, series DGS3MO)
+risk_free_rates:
+  EUR: 0.0278
+  USD: 0.0432
+
 start_date: "2018-01-01"
 end_date: null        # null = up to today
-
-# Annual risk-free rate used in Sharpe ratio (decimal). E.g. 3-month Euribor.
-risk_free_rate: 0.02
 
 trading_days_per_year: 252
 
@@ -54,9 +65,16 @@ display_names:
   NVG.LS: Navigator
   BCP.LS: BCP
   SON.LS: Sonae
+  PSI20.LS: PSI
   NVDA: Nvidia
   AAPL: Apple
   MCD: McDonald's
-  PSI20.LS: PSI
+  JPM: JPMorgan
+  JNJ: Johnson & Johnson
+  XOM: Exxon Mobil
+  KO: Coca-Cola
+  CAT: Caterpillar
+  GOOGL: Alphabet
+  NEE: NextEra Energy
   ^GSPC: S&P 500
   ^NDX: Nasdaq-100

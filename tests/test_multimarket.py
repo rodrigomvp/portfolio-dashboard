@@ -1,11 +1,10 @@
-"""Unit tests for the multi-market helpers in portfolio.metrics and portfolio.config."""
+"""Unit tests for the multi-market helpers in portfolio.metrics."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from portfolio import metrics
-from portfolio.config import load_settings
 
 
 def test_align_fills_a_one_day_holiday():
@@ -56,34 +55,3 @@ def test_weekly_prices_keep_last_price_of_each_week():
     weekly = metrics.weekly_prices(prices)
     assert list(weekly.index) == [pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-12")]
     assert list(weekly) == [5.0, 6.0]
-
-
-def _write(tmp_path, text):
-    path = tmp_path / "settings.yaml"
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-BASE = 'tickers: [A.LS, NVDA]\nstart_date: "2018-01-01"\n'
-
-
-def test_config_reads_benchmarks_currencies_and_fx(tmp_path):
-    settings = load_settings(_write(tmp_path, BASE + (
-        "benchmarks: [PSI20.LS, ^GSPC]\n"
-        "currencies: {NVDA: USD, ^GSPC: USD}\n"
-        "fx_symbols: {USD: EURUSD=X}\n"
-    )))
-    assert settings.benchmarks == ["PSI20.LS", "^GSPC"]
-    assert settings.currency("NVDA") == "USD"
-    assert settings.currency("A.LS") == "EUR"
-    assert settings.all_symbols == ["A.LS", "NVDA", "PSI20.LS", "^GSPC", "EURUSD=X"]
-
-
-def test_config_still_accepts_a_single_benchmark(tmp_path):
-    settings = load_settings(_write(tmp_path, BASE + "benchmark: PSI20.LS\n"))
-    assert settings.benchmarks == ["PSI20.LS"]
-
-
-def test_config_requires_an_exchange_rate_for_each_currency(tmp_path):
-    with pytest.raises(ValueError):
-        load_settings(_write(tmp_path, BASE + "benchmarks: [PSI20.LS]\ncurrencies: {NVDA: USD}\n"))

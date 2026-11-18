@@ -27,3 +27,14 @@ def to_base_currency(prices: pd.DataFrame, currencies: dict[str, str], fx_rates:
         if symbol in converted.columns:
             converted[symbol] = converted[symbol] / rates[currency]
     return converted
+
+def to_new_york_close(fx_rates: pd.DataFrame) -> pd.DataFrame:
+    """Line up Yahoo's daily exchange rates with the New York close.
+
+    Yahoo's daily EUR/USD value for day D is taken at the start of D in London,
+    so it does not include the currency moves of D. The value Yahoo shows for the
+    next day is the closest to the New York close of D. Each date therefore takes
+    the next available value; the last date keeps its own.
+    """
+    rates = fx_rates.dropna(how="all")
+    return rates.shift(-1).fillna(rates)

@@ -97,18 +97,65 @@ Ficheiros: `src/portfolio/risk.py`, `src/portfolio/optimization.py`
 
 Ficheiros: `config/settings.yaml`, `src/portfolio/config.py`, `src/portfolio/fx.py` (novo), `src/portfolio/metrics.py`
 
-- [ ] Config: vários benchmarks, moeda base, moeda de cada ativo e taxa de câmbio
-- [ ] `fx.to_base_currency()`: converter preços em USD para EUR com o `EURUSD=X`
-- [ ] `metrics.align_calendars()`: feriados diferentes → último preço até 3 dias
-- [ ] `metrics.periods_per_year()`: anualizar com o número real de observações
-- [ ] `metrics.weekly_prices()`: correlações semanais (fechos a horas diferentes)
-- [ ] Descarregar Nvidia, Apple, McDonald's, S&P 500, Nasdaq-100 e EUR/USD
-- [ ] Verificar a qualidade dos dados novos (notebook `03_us_data.ipynb`)
-- [ ] App: escolher o benchmark, correlação diária/semanal
+- [x] Config: vários benchmarks, moeda base, moeda de cada ativo e taxa de câmbio
+- [x] `fx.to_base_currency()`: converter preços em USD para EUR com o `EURUSD=X`
+- [x] `metrics.align_calendars()`: feriados diferentes → último preço até 3 dias
+- [x] `metrics.periods_per_year()`: anualizar com o número real de observações
+- [x] `metrics.weekly_prices()`: correlações semanais (fechos a horas diferentes)
+- [x] Descarregar Nvidia, Apple, McDonald's, S&P 500, Nasdaq-100 e EUR/USD
+- [x] Verificar a qualidade dos dados novos (notebook `03_us_data.ipynb`)
+- [x] App: escolher o benchmark, correlação diária/semanal
 
 **Concluído quando:** `pytest` passa todo e a app mostra os 9 ativos em euros com qualquer um dos 3 benchmarks.
 
 **Tag:** `v1.1-two-markets`
+
+---
+
+## v1.2 — Switch de mercado (Portugal | Estados Unidos)
+
+**Porquê:** na v1.1 as ações americanas eram comparadas com o PSI, o que não faz sentido. Cada mercado passa a ter a sua vista, comparada com os seus próprios índices.
+
+### Decisões
+- Switch **Portugal | United States** no topo da sidebar (controlo segmentado). Muda ativos, pesos, benchmark, moeda e taxa sem risco.
+- **Portugal:** 6 ações, benchmark PSI, em euros, taxa sem risco = Euribor a 3 meses.
+- **Estados Unidos:** 10 ações de 9 setores, benchmark S&P 500 por defeito (Nasdaq-100 como alternativa), em dólares com botão **Show in EUR**, taxa sem risco = Tesouro americano a 3 meses.
+- Cada mercado guarda os seus pesos (mudar de mercado e voltar não os perde).
+- Sai da app a correlação semanal: dentro de um só mercado já não há fechos a horas diferentes.
+- Modo **Both** (os dois mercados juntos, benchmark misto): fica para a v1.3.
+
+### Ações americanas
+| Empresa | Ticker | Setor |
+|---|---|---|
+| Nvidia | NVDA | Tecnologia |
+| Apple | AAPL | Tecnologia |
+| McDonald's | MCD | Consumo discricionário |
+| JPMorgan Chase | JPM | Financeiro |
+| Johnson & Johnson | JNJ | Saúde |
+| Exxon Mobil | XOM | Energia |
+| Coca-Cola | KO | Consumo básico |
+| Caterpillar | CAT | Indústria |
+| Alphabet | GOOGL | Comunicação |
+| NextEra Energy | NEE | Utilities |
+
+### Tarefas
+Rodrigo:
+- [ ] `config.py`: ler `markets` (nome, moeda, tickers, benchmarks, taxa sem risco) — guiado por testes
+- [ ] `fx.to_new_york_close()`: corrigir o atraso de um dia do EUR/USD do Yahoo (descoberto no notebook 03)
+
+Claude:
+- [x] `settings.yaml` organizado por mercado, com as 7 ações novas e as taxas sem risco atualizadas
+- [x] App: switch de mercado, benchmark por mercado, moeda $/€ com Show in EUR, taxa sem risco por mercado
+- [x] Testes ajustados, README (Design, Methodology), notebook `03_us_data.ipynb` atualizado
+
+Os dois:
+- [ ] `python scripts/update_data.py` para descarregar as 7 ações novas
+- [ ] Verificar a qualidade dos dados (notebook 03)
+- [ ] Testar a app com os dados reais
+
+**Concluído quando:** `pytest` passa todo; em Portugal tudo é comparado com o PSI em euros; nos EUA com o S&P 500 ou o Nasdaq-100, em dólares ou em euros.
+
+**Tag:** `v1.2-market-switch`
 
 ---
 
@@ -129,6 +176,7 @@ Ficheiros: `config/settings.yaml`, `src/portfolio/config.py`, `src/portfolio/fx.
 
 ## Ideias para depois (só se sobrar tempo)
 
+- v1.3: modo **Both** — carteira com ações dos dois mercados, em euros, com benchmark misto (ex.: 50% PSI + 50% S&P 500)
 - Comparar períodos (ex.: 2020 vs 2022) com um seletor
 - Exportar relatório em PDF
 - Rebalanceamento mensal vs diário e impacto nos resultados

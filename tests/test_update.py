@@ -4,30 +4,30 @@ fetch_prices is replaced by a fake that records every call, so the tests
 run offline and can check which dates were requested.
 """
 
-import dataclasses
 import sqlite3
 
 import pandas as pd
 import pytest
 
 from portfolio import ingest
-from portfolio.config import load_settings
+from portfolio.config import Market, Settings
 
 LAST_AVAILABLE_DAY = "2024-01-05"
 
 
-@pytest.fixture
-def settings(tmp_path):
-    return dataclasses.replace(
-        load_settings(),
-        tickers=["AAA", "BBB"],
-        benchmarks=["IDX"],
-        currencies={},
-        fx_symbols={},
+def make_settings(tmp_path, tickers=("AAA", "BBB")) -> Settings:
+    """One test market, no exchange rates, a temporary database."""
+    return Settings(
+        markets={"TEST": Market(name="Test", currency="EUR", tickers=list(tickers), benchmarks=["IDX"])},
         start_date="2024-01-01",
         end_date=None,
         database_path=tmp_path / "test.db",
     )
+
+
+@pytest.fixture
+def settings(tmp_path):
+    return make_settings(tmp_path)
 
 
 @pytest.fixture
@@ -84,6 +84,6 @@ def test_second_run_does_not_duplicate(settings, calls):
 
 
 def test_symbol_without_data_does_not_stop_the_others(settings, calls):
-    settings = dataclasses.replace(settings, tickers=["AAA", "BAD"])
+    settings = make_settings(settings.database_path.parent, tickers=("AAA", "BAD"))
     written = ingest.update_database(settings)
     assert written == {"AAA": 5, "BAD": 0, "IDX": 5}

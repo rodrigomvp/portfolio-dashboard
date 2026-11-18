@@ -28,8 +28,15 @@ from portfolio.db import get_connection, load_close_prices
 st.set_page_config(page_title="Portfolio Risk Dashboard", page_icon="📈", layout="wide")
 
 settings = load_settings()
-BENCH = settings.benchmarks[0]  # replaced by the choice in the sidebar
-CURRENCY_SIGN = {"EUR": "€", "USD": "$", "GBP": "£"}.get(settings.base_currency, settings.base_currency + " ")
+CURRENCY_SIGNS = {"EUR": "€", "USD": "$", "GBP": "£"}
+CURRENCY_NAMES = {"EUR": "euros", "USD": "dollars", "GBP": "pounds"}
+RISK_FREE_SOURCES = {"EUR": "3-month Euribor", "USD": "3-month US Treasury yield"}
+
+# Streamlit forgets the state of widgets that are not on screen. Re-saving these keys on
+# every run keeps each market's choices (assets, weights, benchmark…) when switching markets.
+for _key in list(st.session_state):
+    if _key.startswith(("weight_", "assets_", "bench_", "in_base_", "rf_")):
+        st.session_state[_key] = st.session_state[_key]
 name = settings.label  # ticker -> name people recognise ("JMT.LS" -> "Jerónimo Martins")
 
 ROLLING_WINDOW = 60  # trading days (~3 months)
@@ -104,7 +111,7 @@ st.html(
 # --------------------------------------------------------------------------
 @st.cache_data(ttl=60 * 60)
 def get_prices(symbols: tuple[str, ...]) -> tuple[pd.DataFrame, list[str]]:
-    """Load prices once per hour (cached across reruns), in the base currency, on one calendar.
+    """Load every price once per hour (cached across reruns), in its own currency.
 
     Returns the prices and the list of symbols that have no data yet.
     """
@@ -113,31 +120,32 @@ def get_prices(symbols: tuple[str, ...]) -> tuple[pd.DataFrame, list[str]]:
         raw = load_close_prices(conn, list(symbols))
     finally:
         conn.close()
-    missing = [s for s in symbols if s not in raw.columns]
-    if missing:
-        return pd.DataFrame(), missing
-
-    fx_columns = {symbol: currency for currency, symbol in settings.fx_symbols.items()}
-    rates = raw[list(fx_columns)].rename(columns=fx_columns)
-    assets = raw.drop(columns=list(fx_columns))
-    in_base = fx.to_base_currency(assets, settings.currencies, rates)
-    # Lisbon and New York have different holidays: carry a closed market's last price forward.
-    return metrics.align_calendars(in_base), []
+    return raw, [s for s in symbols if s not in raw.columns]
 
 
-all_prices, missing_symbols = get_prices(tuple(settings.all_symbols))
+def market_prices(raw: pd.DataFrame, market, in_base_currency: bool) -> pd.DataFrame:
+    """Prices of one market (tickers + benchmarks), optionally converted to the base currency."""
+    symbols = market.tickers + market.benchmarks
+    prices = raw[symbols]
+    if in_base_currency and market.currency != settings.base_currency:
+        fx_symbol = settings.fx_symbols[market.currency]
+        # Yahoo's daily rate is taken at the start of the London day: shift it to the New York close
+        rates = fx.to_new_york_close(raw[[fx_symbol]].rename(columns={fx_symbol: market.currency}))
+        prices = fx.to_base_currency(prices, {s: market.currency for s in symbols}, rates)
+    # Fills the odd day an index has no price (e.g. 12 days of the PSI since 2018).
+    return metrics.align_calendars(prices)
+
+
+raw_prices, missing_symbols = get_prices(tuple(settings.all_symbols))
 if missing_symbols:
     st.error(
         f"No prices yet for {', '.join(missing_symbols)}. "
         "Run `python scripts/update_data.py` and reload this page."
     )
     st.stop()
-if all_prices.empty:
+if raw_prices.empty:
     st.error("There is no price data yet. Run `python scripts/update_data.py` and reload this page.")
     st.stop()
-
-first_day = all_prices.index.min().date()
-last_day = all_prices.index.max().date()
 
 
 # --------------------------------------------------------------------------
@@ -253,8 +261,38 @@ def optimise(asset_returns: pd.DataFrame, risk_free_rate: float, periods: float)
 # Sidebar — inputs
 # --------------------------------------------------------------------------
 with st.sidebar:
+    st.header("Market")
+    market_key = st.segmented_control(
+        "Market", list(settings.markets), format_func=lambda k: settings.markets[k].name,
+        default=list(settings.markets)[0], required=True, key="market", label_visibility="collapsed",
+        width="stretch",
+    )
+    MARKET = settings.markets[market_key]
+
+    in_base = False
+    if MARKET.currency != settings.base_currency:
+        st.session_state.setdefault(f"in_base_{market_key}", False)
+        in_base = st.toggle(
+            f"Show in {CURRENCY_NAMES.get(settings.base_currency, settings.base_currency)}",
+            key=f"in_base_{market_key}",
+            help=f"Converts prices with the daily {settings.base_currency}/{MARKET.currency} rate, "
+                 "so returns and risk are those of an investor who holds euros.",
+        )
+    CURRENCY = settings.base_currency if in_base else MARKET.currency
+    CURRENCY_SIGN = CURRENCY_SIGNS.get(CURRENCY, CURRENCY + " ")
+
+    all_prices = market_prices(raw_prices, MARKET, in_base)
+    first_day = all_prices.index.min().date()
+    last_day = all_prices.index.max().date()
+
     st.header("Portfolio")
-    selected = st.multiselect("Assets", settings.tickers, default=settings.tickers, format_func=name)
+    st.session_state.setdefault(f"assets_{market_key}", MARKET.tickers)
+    n_chosen = len(st.session_state[f"assets_{market_key}"])
+    # Progressive disclosure: the full list of chips only when people want to change it
+    with st.expander(f"Assets · {n_chosen} of {len(MARKET.tickers)}"):
+        selected = st.multiselect(
+            "Assets", MARKET.tickers, format_func=name, key=f"assets_{market_key}", label_visibility="collapsed"
+        )
     if not selected:
         st.warning("Choose at least one asset to build the portfolio.")
         st.stop()
@@ -278,8 +316,15 @@ with st.sidebar:
     st.caption(note)
     st.button("Equal weights", on_click=reset_weights, args=(selected,))
 
-    st.header("Compare with")
-    BENCH = st.selectbox("Benchmark", settings.benchmarks, format_func=name, label_visibility="collapsed")
+    if len(MARKET.benchmarks) > 1:
+        st.header("Compare with")
+        st.session_state.setdefault(f"bench_{market_key}", MARKET.benchmarks[0])
+        BENCH = st.selectbox(
+            "Benchmark", MARKET.benchmarks, format_func=name, key=f"bench_{market_key}",
+            label_visibility="collapsed",
+        )
+    else:
+        BENCH = MARKET.benchmarks[0]
 
     st.header("Period")
     custom = st.session_state.get("custom_dates", False)
@@ -303,16 +348,20 @@ with st.sidebar:
         start, end = first_day, last_day
 
     with st.expander("Assumptions"):
+        st.session_state.setdefault(f"rf_{CURRENCY}", round(settings.risk_free_rate_for(CURRENCY) * 100, 2))
         risk_free = (
             st.number_input(
-                "Risk-free rate (% a year)", value=settings.risk_free_rate * 100, step=0.25, format="%.2f"
+                f"Risk-free rate ({CURRENCY}, % a year)", step=0.25, format="%.2f", key=f"rf_{CURRENCY}"
             )
             / 100
         )
-        st.caption("Used in the Sharpe ratio. Weights are rebalanced every day.")
+        source = RISK_FREE_SOURCES.get(CURRENCY)
+        st.caption(
+            (f"Default: {source}. " if source else "")
+            + "Used in the Sharpe ratio. Weights are rebalanced every day."
+        )
 
-    converted = sorted({settings.currency(s) for s in settings.tickers + settings.benchmarks} - {settings.base_currency})
-    fx_note = f" · {', '.join(converted)} prices converted to {settings.base_currency} daily" if converted else ""
+    fx_note = f" · converted from {MARKET.currency} at the daily rate" if in_base else ""
     st.caption(f"Prices up to {fmt_date(last_day)} · Yahoo Finance{fx_note}")
 
 
@@ -324,7 +373,7 @@ if len(prices) < MIN_DAYS:
     st.warning(f"This period has {len(prices)} trading days. Choose one with at least {MIN_DAYS}.")
     st.stop()
 
-PERIODS_PER_YEAR = metrics.periods_per_year(prices.index)  # ~252 for one exchange, more for two
+PERIODS_PER_YEAR = metrics.periods_per_year(prices.index)  # observations per year in this data
 returns = metrics.simple_returns(prices)
 port_value = metrics.portfolio_value(prices[selected], weights)
 port_returns = metrics.simple_returns(port_value)
@@ -348,8 +397,8 @@ bench_vol = metrics.rolling_volatility(bench_returns, ROLLING_WINDOW, PERIODS_PE
 # --------------------------------------------------------------------------
 st.title("Portfolio Risk Dashboard")
 st.caption(
-    f"{len(selected)} assets against the {name(BENCH)} index · {fmt_date(start)} to {fmt_date(end)} · "
-    f"{len(prices):,} trading days · Educational project, not investment advice"
+    f"{MARKET.name} · {len(selected)} assets against the {name(BENCH)} · in {CURRENCY_NAMES.get(CURRENCY, CURRENCY)} · "
+    f"{fmt_date(start)} to {fmt_date(end)} · {len(prices):,} trading days · Educational project, not investment advice"
 )
 
 tab_overview, tab_risk, tab_corr, tab_opt = st.tabs(["Overview", "Risk", "Correlation", "Optimisation"])
@@ -358,7 +407,8 @@ with tab_overview:
     diff = p["Annual return"] - b["Annual return"]
     st.markdown(
         f'<p class="verdict">Since {fmt_date(start)}, this portfolio returned '
-        f'<strong>{p["Annual return"]:.1%} a year</strong>, {abs(diff) * 100:.1f} percentage points '
+        f'<strong>{p["Annual return"]:.1%} a year</strong> in {CURRENCY_NAMES.get(CURRENCY, CURRENCY)}, '
+        f'{abs(diff) * 100:.1f} percentage points '
         f'{"more" if diff >= 0 else "less"} than the {name(BENCH)}, with '
         f'<strong>{p["Annual volatility"]:.1%} volatility</strong> against {b["Annual volatility"]:.1%} '
         f"for the index.</p>",
@@ -486,15 +536,7 @@ with tab_risk:
     st.caption("The axis leaves out the 0.1% most extreme days on each side so the shape stays readable.")
 
 with tab_corr:
-    markets = {settings.currency(t) for t in selected + [BENCH]}
-    frequency = st.segmented_control(
-        "Returns", ["Daily", "Weekly"], default="Weekly" if len(markets) > 1 else "Daily", required=True,
-        help="Lisbon closes at 16:30 and New York at 21:00 (Lisbon time). News after 16:30 reaches Lisbon "
-             "only the next day, so daily correlations between the two markets look lower than they are. "
-             "Weekly returns reduce that effect.",
-    )
-    corr_returns = returns if frequency == "Daily" else metrics.simple_returns(metrics.weekly_prices(prices))
-    corr = metrics.correlation_matrix(corr_returns)
+    corr = metrics.correlation_matrix(returns)
     corr.index = corr.columns = [name(c) for c in corr.columns]
 
     # Show each pair once: keep the lower triangle, hide the diagonal of 1.00s.
@@ -512,7 +554,7 @@ with tab_corr:
         )
     else:
         summary_text = "Add a second asset to compare correlations."
-    chart_header(f"Correlation of {frequency.lower()} returns", summary_text)
+    chart_header("Correlation of daily returns", summary_text)
 
     fig = px.imshow(
         lower.iloc[1:, :-1],
@@ -568,8 +610,10 @@ with tab_opt:
         x=frontier["volatility"], y=frontier["return"], mode="lines", name="Efficient frontier",
         line={"color": T["ink"], "width": 2}, hovertemplate="Volatility %{x:.1%}<br>Return %{y:.1%}<extra>Frontier</extra>",
     ))
+    label_assets = len(labels) <= 6  # more names than that collide; hover still shows each one
     fig.add_trace(go.Scatter(
-        x=np.sqrt(np.diag(cov)), y=mu, mode="markers+text", name="Single assets", text=labels,
+        x=np.sqrt(np.diag(cov)), y=mu, mode="markers+text" if label_assets else "markers",
+        name="Single assets", text=labels,
         textposition="top center", textfont={"color": T["secondary"]},
         marker={"color": "rgba(0,0,0,0)", "size": 9, "line": {"color": T["secondary"], "width": 2}},
         hovertemplate="%{text}<br>Volatility %{x:.1%}<br>Return %{y:.1%}<extra></extra>",
@@ -615,6 +659,7 @@ with tab_opt:
     st.caption(
         "Expected return is the average daily return × days per year, so it is a little higher than the compound "
         "annual return on the Overview. Every grey dot is a random long-only mix of the selected assets."
+        + ("" if label_assets else " Point at a circle to see which asset it is.")
     )
 
     st.subheader("Suggested weights")
