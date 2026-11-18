@@ -87,3 +87,10 @@ def test_symbol_without_data_does_not_stop_the_others(settings, calls):
     settings = make_settings(settings.database_path.parent, tickers=("AAA", "BAD"))
     written = ingest.update_database(settings)
     assert written == {"AAA": 5, "BAD": 0, "IDX": 5}
+
+
+def test_full_update_downloads_the_whole_history_again(settings, calls):
+    ingest.update_database(settings)
+    calls.clear()
+    ingest.update_database(settings, full=True)
+    assert sorted(calls) == [("AAA", "2024-01-01"), ("BBB", "2024-01-01"), ("IDX", "2024-01-01")]

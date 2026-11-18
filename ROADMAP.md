@@ -122,7 +122,7 @@ Ficheiros: `config/settings.yaml`, `src/portfolio/config.py`, `src/portfolio/fx.
 - **Estados Unidos:** 10 ações de 9 setores, benchmark S&P 500 por defeito (Nasdaq-100 como alternativa), em dólares com botão **Show in EUR**, taxa sem risco = Tesouro americano a 3 meses.
 - Cada mercado guarda os seus pesos (mudar de mercado e voltar não os perde).
 - Sai da app a correlação semanal: dentro de um só mercado já não há fechos a horas diferentes.
-- Modo **Both** (os dois mercados juntos, benchmark misto): fica para a v1.3.
+- Modo **Both** (os dois mercados juntos, benchmark misto): fica para depois da v1.4.
 
 ### Ações americanas
 | Empresa | Ticker | Setor |
@@ -167,7 +167,7 @@ Plano completo guardado no projeto do Claude (`plano-v1.4-universo-alargado.md`)
 - [ ] Config: `tickers` (universo), `default_tickers`, mapa `sectors`
 - [ ] App: seletor com pesquisa (nome · setor), máximo de 15 ativos, exposição por setor no Overview
 - [ ] Notebook `04_universe_quality.ipynb`: histórico desde 2018, saltos por explicar, moeda
-- [ ] Depende da Fase 5, opção (b): os dados vêm do GitHub Action diário
+- [ ] Os dados vêm do GitHub Action diário da Fase 5 (feito)
 
 **Tag:** `v1.4-asset-universe`
 
@@ -175,22 +175,23 @@ Plano completo guardado no projeto do Claude (`plano-v1.4-universo-alargado.md`)
 
 ## Fase 5 — Produção e apresentação (≈ 3–4 dias)
 
-- [ ] **Deploy** no Streamlit Community Cloud (ligar ao repositório GitHub)
-- [ ] Dados em produção: o disco do Streamlit Cloud não é permanente. Opções:
-  - (a) descarregar os dados no arranque e guardar em cache (mais simples), ou
-  - (b) GitHub Action agendada que corre `update_data.py` diariamente e faz commit de um ficheiro Parquet (mais "engenharia de dados")
-- [ ] GitHub Actions a correr os testes em cada push (já incluído em `.github/workflows/tests.yml`) + badge no README
-- [ ] README final: screenshot ou GIF, link da demo, secções **Methodology** e **Limitations** preenchidas
+- [x] Dados em produção: GitHub Action diário (`update-data.yml`, dias úteis às 22:17 UTC) que descarrega o histórico todo e faz commit de `data/prices.csv` se algo mudou; a app constrói a base de dados SQLite a partir do CSV no arranque e nunca chama o Yahoo (`snapshot.py`)
+- [x] Descarga completa em vez de incremental (`update_data.py --full`): o Yahoo recalcula os preços ajustados antigos depois de cada dividendo
+- [x] App pronta para o Streamlit Cloud: importa `src/` sem `pip install -e .` e recarrega a cache quando chega um CSV novo
+- [x] GitHub Actions a correr os testes em cada push + badges no README
+- [x] README final: screenshot, Methodology (pipeline de dados) e Limitations completas
+- [ ] **Deploy** no Streamlit Community Cloud e repositório público
+- [ ] Link da demo no README
 - [ ] Rever código: nomes claros, docstrings, sem código morto
 - [ ] Adicionar ao CV e LinkedIn (link da demo + link do repositório) e escrever um post curto com 1 insight concreto tirado dos dados
 
-**Tag:** `v1.0`
+**Tag:** `v1.3`
 
 ---
 
 ## Ideias para depois (só se sobrar tempo)
 
-- v1.3: modo **Both** — carteira com ações dos dois mercados, em euros, com benchmark misto (ex.: 50% PSI + 50% S&P 500)
+- Modo **Both** — carteira com ações dos dois mercados, em euros, com benchmark misto (ex.: 50% PSI + 50% S&P 500)
 - Comparar períodos (ex.: 2020 vs 2022) com um seletor
 - Exportar relatório em PDF
 - Rebalanceamento mensal vs diário e impacto nos resultados

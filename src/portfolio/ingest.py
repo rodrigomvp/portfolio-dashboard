@@ -40,8 +40,13 @@ def fetch_prices(tickers: list[str], start: str, end: str | None = None) -> pd.D
     return long[COLUMNS].reset_index(drop=True)
 
 
-def update_database(settings: Settings) -> dict[str, int]:
-    """Incremental update. Returns {ticker: rows written}."""
+def update_database(settings: Settings, full: bool = False) -> dict[str, int]:
+    """Update the database. Returns {ticker: rows written}.
+
+    Incremental by default: each ticker restarts at its last stored date.
+    full=True downloads the whole history again. Yahoo's adjusted prices are
+    back-adjusted after every dividend, so only a full download keeps older
+    prices consistent with the newest ones."""
 
     conn = get_connection(settings.database_path)
     try:
@@ -50,7 +55,7 @@ def update_database(settings: Settings) -> dict[str, int]:
         written = {}
 
         for ticker in settings.all_symbols:
-            start = last_dates.get(ticker, settings.start_date)
+            start = settings.start_date if full else last_dates.get(ticker, settings.start_date)
             df = fetch_prices([ticker], start=start, end=settings.end_date)
             written[ticker] = upsert_prices(conn, df)
             logger.info("%s: %d rows written (from %s)", ticker, written[ticker], start)

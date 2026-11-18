@@ -6,14 +6,19 @@ Rule: this file only handles inputs, layout and charts. Every number shown
 here comes from a tested function in src/portfolio/.
 
 Design: the screen answers one question — is this portfolio worth the risk
-it takes compared with the PSI index? The answer is written as a plain
-sentence at the top of the Overview; everything else supports it.
+it takes compared with its market's index? The answer is written as a plain
+sentence at the top of the page; everything else supports it.
+
+Data: prices come from data/prices.csv, refreshed every weekday by a GitHub
+Action. The app loads it into SQLite on start and never calls Yahoo itself.
 Theme colours live in .streamlit/config.toml; chart colours are below.
 """
 
 from __future__ import annotations
 
+import sys
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -21,9 +26,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+# Streamlit Community Cloud installs requirements.txt but not this package
+# (`pip install -e .`), so make src/ importable when it isn't installed.
+SRC = Path(__file__).resolve().parents[1] / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
 from portfolio import fx, metrics, optimization, risk
 from portfolio.config import load_settings
 from portfolio.db import get_connection, load_close_prices
+from portfolio.snapshot import sync_from_csv
 
 st.set_page_config(page_title="Portfolio Risk Dashboard", page_icon="📈", layout="wide")
 
@@ -159,12 +171,18 @@ st.html(
 # --------------------------------------------------------------------------
 # Data loading
 # --------------------------------------------------------------------------
-@st.cache_data(ttl=60 * 60)
-def get_prices(symbols: tuple[str, ...]) -> tuple[pd.DataFrame, list[str]]:
-    """Load every price once per hour (cached across reruns), in its own currency.
+CSV_PATH = settings.database_path.with_suffix(".csv")
 
+
+@st.cache_data(ttl=60 * 60)
+def get_prices(symbols: tuple[str, ...], snapshot_version: float) -> tuple[pd.DataFrame, list[str]]:
+    """Load every price, in its own currency, cached across reruns.
+
+    `snapshot_version` is the CSV's modification time: when the daily Action
+    commits new prices, it changes and the cache is rebuilt.
     Returns the prices and the list of symbols that have no data yet.
     """
+    sync_from_csv(settings.database_path, CSV_PATH)
     conn = get_connection(settings.database_path)
     try:
         raw = load_close_prices(conn, list(symbols))
@@ -186,7 +204,9 @@ def market_prices(raw: pd.DataFrame, market, in_base_currency: bool) -> pd.DataF
     return metrics.align_calendars(prices)
 
 
-raw_prices, missing_symbols = get_prices(tuple(settings.all_symbols))
+raw_prices, missing_symbols = get_prices(
+    tuple(settings.all_symbols), CSV_PATH.stat().st_mtime if CSV_PATH.exists() else 0.0
+)
 if missing_symbols:
     st.error(
         f"No prices yet for {', '.join(missing_symbols)}. "

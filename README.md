@@ -1,12 +1,13 @@
 # Portfolio Risk Dashboard
 
+[![tests](https://github.com/rodrigomvp/portfolio-dashboard/actions/workflows/tests.yml/badge.svg)](https://github.com/rodrigomvp/portfolio-dashboard/actions/workflows/tests.yml)
+[![update data](https://github.com/rodrigomvp/portfolio-dashboard/actions/workflows/update-data.yml/badge.svg)](https://github.com/rodrigomvp/portfolio-dashboard/actions/workflows/update-data.yml)
+
 Interactive dashboard to analyse the risk and return of a stock portfolio: returns, volatility, correlations, drawdowns, risk-adjusted performance, Value-at-Risk and mean-variance optimisation.
 
-> 🚧 Work in progress — see [ROADMAP.md](ROADMAP.md) for the development plan.
+**Live demo:** _link added after deployment_ · Development history: [ROADMAP.md](ROADMAP.md)
 
-**Live demo:** _coming soon (Phase 5)_
-
-<!-- Phase 5: add a screenshot or GIF of the dashboard here -->
+![The dashboard: Portugal market, equal-weight portfolio against the PSI since 2018](docs/screenshot.png)
 
 ## Why this project
 
@@ -23,24 +24,28 @@ Most portfolio dashboards stop at descriptive charts. This one aims to support a
 | Efficient frontier, min-variance & max-Sharpe portfolios | ✅ Done |
 | Two markets (Lisbon + New York) in euros, choice of benchmark (PSI, S&P 500, Nasdaq-100) | ✅ v1.1 |
 | Market switch: Portugal vs PSI in EUR; 10 US stocks from 9 sectors vs S&P 500 / Nasdaq-100 in USD, with an option to show them in EUR | ✅ v1.2 |
-| Deployment + scheduled data refresh | ⬜ Phase 5 |
+| Daily data refresh (GitHub Action → CSV snapshot) and deployment on Streamlit Community Cloud | ✅ v1.3 |
 
 ## Project structure
 
 ```
 portfolio-dashboard/
 ├── app/streamlit_app.py        # Dashboard (UI only, no business logic)
-├── config/settings.yaml        # Tickers, benchmark, dates, risk-free rate
-├── data/                       # Local SQLite database (git-ignored)
+├── config/settings.yaml        # Markets, tickers, benchmarks, dates, risk-free rates
+├── data/prices.csv             # Price snapshot, committed daily (the SQLite file is git-ignored)
 ├── scripts/update_data.py      # CLI entry point to refresh prices
 ├── src/portfolio/
 │   ├── config.py               # Loads settings.yaml
 │   ├── db.py                   # SQLite schema and read/write helpers
 │   ├── ingest.py               # Downloads prices from yfinance
+│   ├── snapshot.py             # SQLite ⇄ CSV snapshot
+│   ├── fx.py                   # Currency conversion
 │   ├── metrics.py              # Return and risk metrics
 │   ├── risk.py                 # VaR / CVaR
 │   └── optimization.py         # Mean-variance optimisation
-└── tests/                      # pytest unit tests
+├── notebooks/                  # Data quality, metrics and US data checks
+├── tests/                      # pytest unit tests
+└── .github/workflows/          # tests on every push; daily data refresh
 ```
 
 Design principle: **all calculations live in `src/portfolio/` and are unit-tested; the Streamlit app only displays them.**
@@ -53,10 +58,14 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .
 
-python scripts/update_data.py    # download prices into data/prices.db
-streamlit run app/streamlit_app.py
+streamlit run app/streamlit_app.py   # builds data/prices.db from data/prices.csv on first run
 pytest
+
+python scripts/update_data.py        # optional: fetch the newest days from Yahoo Finance
+python scripts/update_data.py --full # optional: download the whole history again
 ```
+
+The repository already contains the prices up to the last weekday, so the app runs without downloading anything.
 
 ## Design
 
@@ -67,7 +76,7 @@ The answer is a plain sentence with the actual numbers, and it is the largest te
 - **Glass only where it belongs.** The context bar is the one translucent surface (backdrop blur and a hairline edge, after Apple's Liquid Glass): it floats above content that scrolls beneath it, and charts, tables and text never get glass. With *Reduce transparency* or *Increase contrast* turned on in the system, the bar becomes opaque with a stronger border. Text on the bar keeps at least 6.9:1 contrast even with a coloured chart line passing underneath.
 - **A quiet scorecard.** Return, volatility, Sharpe ratio and max drawdown sit in one row without boxes, each with its difference from the index.
 
-- **Colour has one meaning.** Blue is the portfolio, and also the accent of every control that changes it. Orange is the PSI, and the index line is always dashed so the two series never depend on colour alone. Green and red appear only on deltas against the index, always with an arrow.
+- **Colour has one meaning.** Blue is the portfolio, and also the accent of every control that changes it. Orange is the index, and the index line is always dashed so the two series never depend on colour alone. Green and red appear only on deltas against the index, always with an arrow.
 - **Contrast.** Text is at least 4.5:1 and chart lines at least 3:1 against the background, in both light and dark mode (tokens in `.streamlit/config.toml` and at the top of `app/streamlit_app.py`).
 - **Every chart has a one-sentence summary** with real values (dates, percentages), so the main message does not depend on reading the chart.
 - **One market at a time.** A segmented control switches between Portugal and the United States, so each portfolio is compared with its own index (comparing Nvidia with the PSI says nothing). Each market keeps its own assets, weights and benchmark when you switch back and forth. US figures are in dollars by default; *Show in euros* converts them to what an investor in euros would have earned.
@@ -81,6 +90,7 @@ Guided by Apple's Human Interface Guidelines (accessibility, color, typography, 
 
 ### Data
 - Source: Yahoo Finance via yfinance, adjusted daily closes (dividends and splits), Jan 2018 onwards.
+- Pipeline: every weekday at 22:17 UTC, after the New York close, a GitHub Action downloads the whole history again, stores it in SQLite and commits it as `data/prices.csv` if anything changed. The deployed app loads that CSV into SQLite when it starts, so it never calls Yahoo itself. The CSV is sorted by ticker and date, so a normal day adds a few lines to the git diff. The history is downloaded again in full, not just the newest days, because Yahoo recalculates every past adjusted price after each dividend: an incremental update would keep older prices from before the adjustment next to newer prices from after it, and every return across that dividend would be wrong.
 - Currency: each market is shown in its own currency. With *Show in euros*, US prices are converted with the daily EUR/USD rate (`EURUSD=X`), so returns and volatility are those of a euro investor and include currency risk. Yahoo's daily rate is taken at the start of the London day, so each New York close uses Yahoo's next-day value (`fx.to_new_york_close`); without this, currency moves would land one day late (see `notebooks/03_us_data.ipynb`).
 - Risk-free rate: one per currency, used in the Sharpe ratio — 3-month Euribor for EUR, 3-month US Treasury yield for USD (values and dates in `config/settings.yaml`). When US figures are shown in euros, the EUR rate is used.
 - Quality checks: see `notebooks/01_data_quality.ipynb`.
@@ -93,7 +103,9 @@ Guided by Apple's Human Interface Guidelines (accessibility, color, typography, 
 - **Small universes.** 6 Portuguese and 10 US stocks, chosen today: companies that were removed or went bankrupt since 2018 are not included (survivorship bias).
 - **Price indices vs. adjusted prices.** Stock prices include dividends, but the PSI, S&P 500 and Nasdaq-100 are price indices. Comparisons with the index therefore favour the portfolio by roughly the index dividend yield.
 
-_To be written: past performance vs. future returns, normality assumption in parametric VaR, data quality of yfinance._
+- **The past does not predict the future.** Every figure is computed on 2018–2026 data. The optimiser shows how much that matters: highest-Sharpe weights fitted on everything except the last 12 months, then held for those 12 months, returned 34.8% in Portugal (equal weights: 25.7%) but −1.3% in the US (equal weights: 17.2%), as of Nov 2026 (*Optimisation* tab, "Would it have worked?"). Optimal weights are an analysis of the past, not a forecast.
+- **Normality in parametric VaR.** Parametric VaR assumes normally distributed daily returns, but real returns have fat tails (excess kurtosis of about 11 in the Portuguese and 15 in the US equal-weight portfolio). At 99%, the equal-weight portfolio lost more than its parametric VaR on 38 days in Portugal and 46 in the US, against about 23 and 22 expected. That is why historical VaR and CVaR are shown next to it.
+- **Data quality of yfinance.** Yahoo Finance is free and unofficial: there is no guarantee of completeness, and the API can change or limit requests without notice. Known issues, all handled: the PSI has no price on 12 dates since 2018; the daily EUR/USD rate is stamped one day early (see Methodology); adjusted prices change after every dividend (hence the full daily download). A production system would use a licensed data provider.
 
 ## Tech stack
 
